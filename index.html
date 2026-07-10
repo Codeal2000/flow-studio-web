@@ -82,141 +82,72 @@
     </div>
 
     <div id="canvas-container"></div>
+<script>
+  // --- DYNAMIC RIGGING MAPPER ---
+// Maps MediaPipe data tracking point IDs straight to standard character bone roles
+const BONE_MAP = {
+    "11": "LeftArm",       // Left Shoulder
+    "12": "RightArm",      // Right Shoulder
+    "13": "LeftForeArm",   // Left Elbow
+    "14": "RightForeArm",  // Right Elbow
+    "23": "LeftUpLeg",     // Left Hip
+    "24": "RightUpLeg",    // Right Hip
+    "25": "LeftLeg",       // Left Knee
+    "26": "RightLeg"       // Right Knee
+};
 
-    <script>
-        // --- 3D VIEWPORT SETUP ---
-        const container = document.getElementById('canvas-container');
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050505);
-        scene.fog = new THREE.FogExp2(0x050505, 0.03);
+let characterBones = {}; // Holds references to your actual 3D model's bones
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 2.5, 4.5);
+// Scans an uploaded character model to find and bind its internal bones
+function scanCharacterSkeleton(model) {
+    characterBones = {}; // Clear previous map
+    console.log("Analyzing character rigging structure...");
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        container.appendChild(renderer.domElement);
+    model.traverse((node) => {
+        if (node.isBone) {
+            const boneName = node.name.toLowerCase();
+            
+            // Fuzzy match names commonly used by Mixamo, Blender, and Unreal Engine
+            if (boneName.includes('leftarm') || boneName.includes('leftshoulder')) characterBones["11"] = node;
+            if (boneName.includes('rightarm') || boneName.includes('rightshoulder')) characterBones["12"] = node;
+            if (boneName.includes('leftforearm') || boneName.includes('leftelbow')) characterBones["13"] = node;
+            if (boneName.includes('rightforearm') || boneName.includes('rightelbow')) characterBones["14"] = node;
+            if (boneName.includes('leftupleg') || boneName.includes('lefthip')) characterBones["23"] = node;
+            if (boneName.includes('rightupleg') || boneName.includes('righthip')) characterBones["24"] = node;
+            if (boneName.includes('leftleg') || boneName.includes('leftknee')) characterBones["25"] = node;
+            if (boneName.includes('rightleg') || boneName.includes('rightknee')) characterBones["26"] = node;
+        }
+    });
 
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        controls.maxPolarAngle = Math.PI / 2 - 0.01;
+    const bonesFound = Object.keys(characterBones).length;
+    console.log(`Skeleton Analysis Complete. Bound ${bonesFound} essential rigging nodes.`);
+    
+    if (bonesFound < 4) {
+        document.getElementById('asset-status').innerText = "Warning: Unstandardized Rig";
+        document.getElementById('asset-status').style.color = "#ffaa00";
+    }
+}
 
-        // Cinematic Lighting Studio
-        scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+// --- TEST RIG ANIMATION FUNCTION ---
+// Simulates tracking data rotations using mathematical waves to verify structural stability
+function applyTestRigRotations(elapsedTime) {
+    // If a custom model with bones is active, let's rotate its arms smoothly
+    if (characterBones["11"] && characterBones["12"]) {
+        // Calculate a smooth rotational wave for the shoulders
+        const wave = Math.sin(elapsedTime * 2) * 0.5;
         
-        const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
-        mainLight.position.set(5, 8, 5);
-        mainLight.castShadow = true;
-        mainLight.shadow.mapSize.width = 2048;
-        mainLight.shadow.mapSize.height = 2048;
-        scene.add(mainLight);
-
-        const fillLight = new THREE.PointLight(0x007aff, 0.6, 10);
-        fillLight.position.set(-4, 3, -2);
-        scene.add(fillLight);
-
-        const floorGrid = new THREE.GridHelper(50, 50, 0x222222, 0x111111);
-        scene.add(floorGrid);
-
-        // Core Dynamic References
-        let activeActor = null;
-        const gltfLoader = new THREE.GLTFLoader();
-
-        // Load Default Placeholder Box
-        function loadDefaultProxy() {
-            if(activeActor) scene.remove(activeActor);
-            const geometry = new THREE.BoxGeometry(0.8, 1.8, 0.8);
-            const material = new THREE.MeshStandardMaterial({ color: 0x007aff, roughness: 0.3, metalness: 0.1 });
-            activeActor = new THREE.Mesh(geometry, material);
-            activeActor.position.y = 0.9;
-            activeActor.castShadow = true;
-            activeActor.receiveShadow = true;
-            scene.add(activeActor);
-        }
-        loadDefaultProxy();
-
-        // --- PIPELINE LOGIC (UPLOADS & PIPING) ---
-
-        // Handle Video Source
-        document.getElementById('video-input').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            const videoUrl = URL.createObjectURL(file);
-            const preview = document.getElementById('video-preview');
-            const previewContainer = document.getElementById('video-preview-container');
-            
-            preview.src = videoUrl;
-            previewContainer.style.display = 'block';
-        });
-
-        // Handle Custom 3D Character Import (.gltf / .glb)
-        document.getElementById('model-input').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            document.getElementById('asset-status').innerText = "Loading Model...";
-            document.getElementById('asset-status').style.color = "#ffaa00";
-
-            const reader = new FileReader();
-            reader.readAsArrayBuffer(file);
-            reader.onload = function(event) {
-                const contents = event.target.result;
-
-                gltfLoader.parse(contents, '', function(gltf) {
-                    // Remove old character model from canvas
-                    if (activeActor) scene.remove(activeActor);
-
-                    activeActor = gltf.scene;
-                    
-                    // Auto-adjust scale to fit standard human size proportions
-                    const box = new THREE.Box3().setFromObject(activeActor);
-                    const size = box.getSize(new THREE.Vector3());
-                    const scaleFactor = 1.8 / size.y; // Standardize to 1.8 meters high
-                    activeActor.scale.set(scaleFactor, scaleFactor, scaleFactor);
-                    
-                    // Center the model's feet perfectly on the ground grid
-                    activeActor.position.set(0, 0, 0);
-                    
-                    activeActor.traverse(function(node) {
-                        if (node.isMesh) {
-                            node.castShadow = true;
-                            node.receiveShadow = true;
-                        }
-                    });
-
-                    scene.add(activeActor);
-                    
-                    document.getElementById('asset-status').innerText = file.name.substring(0, 18) + "...";
-                    document.getElementById('asset-status').style.color = "#00ff64";
-                }, function(error) {
-                    console.error(error);
-                    document.getElementById('asset-status').innerText = "Error Loading File";
-                    document.getElementById('asset-status').style.color = "#ff3b30";
-                });
-            };
-        });
-
-        // Animation Loop
-        const clock = new THREE.Clock();
-        function animate() {
-            requestAnimationFrame(animate);
-            const elapsed = clock.getElapsedTime();
-            controls.update();
-            renderer.render(scene, camera);
-        }
-        animate();
-
-        // Responsive Resizing
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        // Apply rotations cleanly using Quaternions to eliminate gimbal lock distortion
+        characterBones["11"].quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), wave);  // Wave left arm
+        characterBones["12"].quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, -1), wave); // Wave right arm
+        
+        // Add a secondary fold rotation to the elbows
+        if (characterBones["13"]) characterBones["13"].quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.abs(wave));
+        if (characterBones["14"]) characterBones["14"].quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.abs(wave));
+    } else if (activeActor && !activeActor.isMesh) {
+        // Fallback placeholder animation if character contains no compatible bones
+        activeActor.rotation.y = elapsedTime * 0.3;
+    }
+}
     </script>
 </body>
 </html>
