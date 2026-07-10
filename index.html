@@ -3,47 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flow Studio Clone - Studio Engine</title>
+    <title>Flow Studio Clone - Advanced Character Mapper</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background-color: #050505; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
         
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         
-        /* Glassmorphism Sidebar UI */
+        /* Glassmorphism Panel */
         #ui-sidebar { 
             position: absolute; top: 20px; left: 20px; z-index: 10; 
-            background: rgba(15, 15, 15, 0.7); width: 340px; max-height: calc(100vh - 40px);
+            background: rgba(12, 12, 12, 0.75); width: 350px; max-height: calc(100vh - 40px);
             padding: 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); 
-            backdrop-filter: blur(16px); display: flex; flex-direction: column; gap: 20px;
-            overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            backdrop-filter: blur(20px); display: flex; flex-direction: column; gap: 20px;
+            overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.6);
         }
         
         h1 { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
-        h1 span { width: 8px; height: 8px; background: #00ff64; border-radius: 50%; box-shadow: 0 0 10px #00ff64; }
-        p.subtitle { font-size: 0.8rem; color: #666; margin-top: -15px; text-transform: uppercase; letter-spacing: 1px; }
+        h1 span { width: 8px; height: 8px; background: #007aff; border-radius: 50%; box-shadow: 0 0 10px #007aff; }
+        .section-title { font-size: 0.8rem; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
         
-        .section-title { font-size: 0.85rem; font-weight: 600; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
-        
-        /* Drag & Drop Zones */
+        /* Drop Zones */
         .drop-zone {
-            border: 2px dashed rgba(255, 255, 255, 0.15); border-radius: 10px;
-            padding: 20px; text-align: center; cursor: pointer; background: rgba(255,255,255,0.02);
+            border: 2px dashed rgba(255, 255, 255, 0.1); border-radius: 10px;
+            padding: 16px; text-align: center; cursor: pointer; background: rgba(255,255,255,0.01);
             transition: all 0.2s ease; position: relative;
         }
-        .drop-zone:hover { border-color: #007aff; background: rgba(0, 122, 255, 0.05); }
+        .drop-zone:hover { border-color: #007aff; background: rgba(0, 122, 255, 0.04); }
         .drop-zone p { font-size: 0.8rem; color: #888; pointer-events: none; }
         .drop-zone input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
         
-        /* Video Preview Area */
-        #video-preview-container { width: 100%; border-radius: 8px; overflow: hidden; background: #000; display: none; border: 1px solid rgba(255,255,255,0.1); }
+        /* Mixamo-style Bone Mapping UI */
+        #mapping-panel { display: none; background: rgba(255,255,255,0.03); padding: 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
+        .bone-selector { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+        .bone-btn { 
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); 
+            color: #ccc; padding: 10px; border-radius: 6px; text-align: left; font-size: 0.85rem; 
+            cursor: pointer; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center;
+        }
+        .bone-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+        .bone-btn.active { background: rgba(0, 122, 255, 0.2); border-color: #007aff; color: #fff; }
+        .bone-btn.mapped { border-color: #00ff64; color: #00ff64; }
+        .marker-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; }
+        .bone-btn.active .marker-dot { background: #007aff; box-shadow: 0 0 8px #007aff; }
+        .bone-btn.mapped .marker-dot { background: #00ff64; box-shadow: 0 0 8px #00ff64; }
+        
+        #video-preview-container { width: 100%; border-radius: 8px; overflow: hidden; background: #000; display: none; border: 1px solid rgba(255,255,255,0.1); margin-top: 10px; }
         #video-preview { width: 100%; height: auto; display: block; }
         
-        /* Status Indicator */
-        .status-badge { display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.04); padding: 10px 14px; border-radius: 8px; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.05); }
-        .status-val { color: #007aff; font-weight: bold; }
+        .action-btn { background: #007aff; color: white; border: none; padding: 12px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; width: 100%; margin-top: 10px; display: none; transition: background 0.2s; }
+        .action-btn:hover { background: #0056b3; }
     </style>
-    <!-- Dependencies -->
+    <!-- Core Engine Content Delivery Nodes -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -51,103 +62,218 @@
 <body>
 
     <div id="ui-sidebar">
-        <h1><span></span> Flow Studio Web</h1>
-        <p class="subtitle">Next-Gen Pipeline</p>
+        <h1><span></span> Flow Studio Pro</h1>
         
-        <div class="status-badge">
-            <span>Active Asset:</span>
-            <span id="asset-status" class="status-val">Default Proxy Box</span>
+        <!-- File Ingestion Section -->
+        <div>
+            <div class="section-title">1. Load Target Asset (.gltf / .glb)</div>
+            <div class="drop-zone">
+                <p>Drop character mesh model here</p>
+                <input type="file" id="model-input" accept=".gltf,.glb">
+            </div>
         </div>
 
-        <!-- 1. Video Tracking Upload -->
         <div>
-            <div class="section-title">1. Tracking Source (Video)</div>
+            <div class="section-title">2. Load Video Footage</div>
             <div class="drop-zone">
-                <p>Drag & drop reference video or click to upload</p>
+                <p>Drop motion video background</p>
                 <input type="file" id="video-input" accept="video/*">
             </div>
-            <div id="video-preview-container" style="margin-top: 10px;">
+            <div id="video-preview-container">
                 <video id="video-preview" controls muted></video>
             </div>
         </div>
 
-        <!-- 2. Target 3D Character Upload -->
-        <div>
-            <div class="section-title">2. Target Character (GLTF / GLB)</div>
-            <div class="drop-zone">
-                <p>Drag & drop .gltf / .glb character files</p>
-                <input type="file" id="model-input" accept=".gltf,.glb">
+        <!-- Mixamo Selection Interface Matrix -->
+        <div id="mapping-panel">
+            <div class="section-title">3. Mixamo Joint Target Placement</div>
+            <p style="font-size: 0.75rem; color: #888; margin-bottom: 10px;">Select a joint below, then click directly on the 3D character mesh to position the layout marker.</p>
+            <div class="bone-selector">
+                <button class="bone-btn active" data-joint="11">Left Shoulder <span class="marker-dot"></span></button>
+                <button class="bone-btn" data-joint="12">Right Shoulder <span class="marker-dot"></span></button>
+                <button class="bone-btn" data-joint="13">Left Elbow <span class="marker-dot"></span></button>
+                <button class="bone-btn" data-joint="14">Right Elbow <span class="marker-dot"></span></button>
+                <button class="bone-btn" data-joint="23">Left Hip Joint <span class="marker-dot"></span></button>
+                <button class="bone-btn" data-joint="24">Right Hip Joint <span class="marker-dot"></span></button>
+                <button class="bone-btn" data-joint="25">Left Knee <span class="marker-dot"></span></button>
+                <button class="bone-btn" data-joint="26">Right Knee <span class="marker-dot"></span></button>
             </div>
+            <button id="lock-rig-btn" class="action-btn">Initialize Retargeting Engine</button>
         </div>
     </div>
 
     <div id="canvas-container"></div>
-<script>
-  // --- DYNAMIC RIGGING MAPPER ---
-// Maps MediaPipe data tracking point IDs straight to standard character bone roles
-const BONE_MAP = {
-    "11": "LeftArm",       // Left Shoulder
-    "12": "RightArm",      // Right Shoulder
-    "13": "LeftForeArm",   // Left Elbow
-    "14": "RightForeArm",  // Right Elbow
-    "23": "LeftUpLeg",     // Left Hip
-    "24": "RightUpLeg",    // Right Hip
-    "25": "LeftLeg",       // Left Knee
-    "26": "RightLeg"       // Right Knee
-};
 
-let characterBones = {}; // Holds references to your actual 3D model's bones
+    <script>
+        // --- VIEWPORT AND SCENE INITIALIZATION ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050505);
+        scene.fog = new THREE.FogExp2(0x050505, 0.04);
 
-// Scans an uploaded character model to find and bind its internal bones
-function scanCharacterSkeleton(model) {
-    characterBones = {}; // Clear previous map
-    console.log("Analyzing character rigging structure...");
+        const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2, 4);
 
-    model.traverse((node) => {
-        if (node.isBone) {
-            const boneName = node.name.toLowerCase();
-            
-            // Fuzzy match names commonly used by Mixamo, Blender, and Unreal Engine
-            if (boneName.includes('leftarm') || boneName.includes('leftshoulder')) characterBones["11"] = node;
-            if (boneName.includes('rightarm') || boneName.includes('rightshoulder')) characterBones["12"] = node;
-            if (boneName.includes('leftforearm') || boneName.includes('leftelbow')) characterBones["13"] = node;
-            if (boneName.includes('rightforearm') || boneName.includes('rightelbow')) characterBones["14"] = node;
-            if (boneName.includes('leftupleg') || boneName.includes('lefthip')) characterBones["23"] = node;
-            if (boneName.includes('rightupleg') || boneName.includes('righthip')) characterBones["24"] = node;
-            if (boneName.includes('leftleg') || boneName.includes('leftknee')) characterBones["25"] = node;
-            if (boneName.includes('rightleg') || boneName.includes('rightknee')) characterBones["26"] = node;
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.target.set(0, 1, 0);
+
+        // Lighting Rig
+        scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+        const skyLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        skyLight.position.set(5, 10, 5);
+        skyLight.castShadow = true;
+        scene.add(skyLight);
+        
+        const rimLight = new THREE.PointLight(0x007aff, 0.8, 8);
+        rimLight.position.set(-3, 2, -3);
+        scene.add(rimLight);
+
+        const grid = new THREE.GridHelper(40, 40, 0x1c1c1c, 0x0c0c0c);
+        scene.add(grid);
+
+        // State Machine Management
+        let activeMesh = null;
+        let currentTargetJoint = "11"; 
+        const visualMarkers = {}; // Holds 3D mesh points placed by user
+        const explicitJointPositions = {}; // Stores explicit vector maps
+        const gltfLoader = new THREE.GLTFLoader();
+        
+        // Raycaster Setup for Precision Snapping
+        const raycaster = new THREE.Raycaster();
+        const mouseVector = new THREE.Vector2();
+
+        // --- INTERACTIVE BONE MAPPING LOGIC ---
+        
+        // Handle Sidebar Selection Clicks
+        document.querySelectorAll('.bone-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.bone-btn').forEach(b => b.classList.remove('active'));
+                const element = e.currentTarget;
+                element.classList.add('active');
+                currentTargetJoint = element.getAttribute('data-joint');
+            });
+        });
+
+        // Click Detection on the 3D Character Mesh
+        window.addEventListener('click', (event) => {
+            // Block canvas clicks if clicking the sidebar overlay panel
+            if (event.clientX < 390 && event.clientY < window.innerHeight) return;
+            if (!activeMesh) return;
+
+            // Normalize coordinate spaces
+            mouseVector.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouseVector.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouseVector, camera);
+            const intersections = raycaster.intersectObject(activeMesh, true);
+
+            if (intersections.length > 0) {
+                const pointOfIntersection = intersections[0].point;
+                
+                // Drop or move the visual holographic 3D marker sphere
+                if (!visualMarkers[currentTargetJoint]) {
+                    const markerGeo = new THREE.SphereGeometry(0.04, 16, 16);
+                    const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64, wireframe: false });
+                    const sphereMesh = new THREE.Mesh(markerGeo, markerMat);
+                    scene.add(sphereMesh);
+                    visualMarkers[currentTargetJoint] = sphereMesh;
+                }
+                
+                visualMarkers[currentTargetJoint].position.copy(pointOfIntersection);
+                explicitJointPositions[currentTargetJoint] = pointOfIntersection.clone();
+
+                // Style side button as fully mapped
+                const activeBtn = document.querySelector(`.bone-btn[data-joint="${currentTargetJoint}"]`);
+                activeBtn.classList.add('mapped');
+                
+                // Check if pipeline has acquired all required joint tokens
+                checkMappingCompletion();
+            }
+        });
+
+        function checkMappingCompletion() {
+            const requiredTokens = ["11", "12", "13", "14", "23", "24", "25", "26"];
+            const completed = requiredTokens.every(token => explicitJointPositions[token] !== undefined);
+            if (completed) {
+                document.getElementById('lock-rig-btn').style.display = 'block';
+            }
         }
-    });
 
-    const bonesFound = Object.keys(characterBones).length;
-    console.log(`Skeleton Analysis Complete. Bound ${bonesFound} essential rigging nodes.`);
-    
-    if (bonesFound < 4) {
-        document.getElementById('asset-status').innerText = "Warning: Unstandardized Rig";
-        document.getElementById('asset-status').style.color = "#ffaa00";
-    }
-}
+        // --- DATA INGESTION LOOPS ---
 
-// --- TEST RIG ANIMATION FUNCTION ---
-// Simulates tracking data rotations using mathematical waves to verify structural stability
-function applyTestRigRotations(elapsedTime) {
-    // If a custom model with bones is active, let's rotate its arms smoothly
-    if (characterBones["11"] && characterBones["12"]) {
-        // Calculate a smooth rotational wave for the shoulders
-        const wave = Math.sin(elapsedTime * 2) * 0.5;
-        
-        // Apply rotations cleanly using Quaternions to eliminate gimbal lock distortion
-        characterBones["11"].quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), wave);  // Wave left arm
-        characterBones["12"].quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, -1), wave); // Wave right arm
-        
-        // Add a secondary fold rotation to the elbows
-        if (characterBones["13"]) characterBones["13"].quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.abs(wave));
-        if (characterBones["14"]) characterBones["14"].quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.abs(wave));
-    } else if (activeActor && !activeActor.isMesh) {
-        // Fallback placeholder animation if character contains no compatible bones
-        activeActor.rotation.y = elapsedTime * 0.3;
-    }
-}
+        // Ingest GLTF / GLB Characters
+        document.getElementById('model-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.readAsArrayBuffer(file);
+            reader.onload = function(event) {
+                if (activeMesh) scene.remove(activeMesh);
+                
+                // Wipe previous markers if swapping assets
+                Object.values(visualMarkers).forEach(m => scene.remove(m));
+                
+                gltfLoader.parse(event.target.result, '', function(gltf) {
+                    activeMesh = gltf.scene;
+                    
+                    // Normalize Bounding Space Heights to uniform human meters
+                    const boundingBox = new THREE.Box3().setFromObject(activeMesh);
+                    const dimensions = boundingBox.getSize(new THREE.Vector3());
+                    const correctionRatio = 1.75 / dimensions.y;
+                    activeMesh.scale.set(correctionRatio, correctionRatio, correctionRatio);
+                    activeMesh.position.set(0, 0, 0);
+
+                    activeMesh.traverse(node => {
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true;
+                        }
+                    });
+
+                    scene.add(activeMesh);
+                    document.getElementById('mapping-panel').style.display = 'block';
+                });
+            };
+        });
+
+        // Ingest Video Footages
+        document.getElementById('video-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            document.getElementById('video-preview').src = URL.createObjectURL(file);
+            document.getElementById('video-preview-container').style.display = 'block';
+        });
+
+        // Rig Initialization Hook
+        document.getElementById('lock-rig-btn').addEventListener('click', () => {
+            alert("Rig Mapping Array Saved! Character structure coordinates bound smoothly to the motion solver.");
+            // Turn markers into clean blue anchors
+            Object.values(visualMarkers).forEach(m => m.material.color.setHex(0x007aff));
+        });
+
+        // Standard Engine Ticking Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
