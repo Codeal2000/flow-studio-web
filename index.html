@@ -42,7 +42,6 @@
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
 
@@ -56,15 +55,15 @@
             <div class="slider-group">
                 <div class="control-row">
                     <label><span>Left Shoulder Roll (Z Axis)</span><span id="val-11">0°</span></label>
-                    <input type="range" id="slider-shoulder-l" min="-90" max="135" value="0">
+                    <input type="range" id="slider-shoulder-l" min="-90" max="90" value="0">
                 </div>
                 <div class="control-row">
                     <label><span>Right Shoulder Roll (Z Axis)</span><span id="val-12">0°</span></label>
-                    <input type="range" id="slider-shoulder-r" min="-90" max="135" value="0">
+                    <input type="range" id="slider-shoulder-r" min="-90" max="90" value="0">
                 </div>
                 <div class="control-row">
-                    <label><span>Hip Spread (Legs Out)</span><span id="val-23">0°</span></label>
-                    <input type="range" id="slider-hips" min="-10" max="60" value="0">
+                    <label><span>Elbow Hinge (X Axis)</span><span id="val-23">0°</span></label>
+                    <input type="range" id="slider-elbow" min="0" max="120" value="0">
                 </div>
             </div>
         </div>
@@ -72,14 +71,9 @@
         <div id="mapping-panel">
             <div class="section-title">Joint Reference Map Status</div>
             <div class="bone-selector">
-                <div class="bone-btn" data-joint="11">Left Shoulder <span class="marker-dot"></span></div>
-                <div class="bone-btn" data-joint="12">Right Shoulder <span class="marker-dot"></span></div>
-                <div class="bone-btn" data-joint="13">Left Elbow <span class="marker-dot"></span></div>
-                <div class="bone-btn" data-joint="14">Right Elbow <span class="marker-dot"></span></div>
-                <div class="bone-btn" data-joint="23">Left Hip Joint <span class="marker-dot"></span></div>
-                <div class="bone-btn" data-joint="24">Right Hip Joint <span class="marker-dot"></span></div>
-                <div class="bone-btn" data-joint="25">Left Knee <span class="marker-dot"></span></div>
-                <div class="bone-btn" data-joint="26">Right Knee <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-11">Left Shoulder Joint <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-12">Right Shoulder Joint <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-13">Mechanical Elbow Joint <span class="marker-dot"></span></div>
             </div>
         </div>
     </div>
@@ -92,12 +86,11 @@
         scene.background = new THREE.Color(0x050505);
 
         const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 1.4, 2.5);
+        camera.position.set(0, 1.5, 3);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.shadowMap.enabled = true;
         container.appendChild(renderer.domElement);
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -105,7 +98,7 @@
         controls.dampingFactor = 0.05;
         controls.target.set(0, 1, 0);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.4));
         const skyLight = new THREE.DirectionalLight(0xffffff, 1.2);
         skyLight.position.set(5, 10, 5);
         scene.add(skyLight);
@@ -113,130 +106,124 @@
         const grid = new THREE.GridHelper(40, 40, 0x1c1c1c, 0x0c0c0c);
         scene.add(grid);
 
-        let activeMesh = null;
-        const visualMarkers = {};          
-        const internalBoneObjects = {};     
-        
-        const gltfLoader = new THREE.GLTFLoader();
+        // Core SkinnedMesh references
+        let bones = [];
+        let mesh = null;
+        const visualMarkers = [];
 
-        // FIXED: Swapped to a standard public glTF sample distribution server that permits unblocked CORS lookups
-        const DEFAULT_MODEL_URL = "https://gltf-viewer.donmccurdy.com/assets/models/XBot.glb";
+        function buildLocalProceduralRig() {
+            document.getElementById('pipeline-loader').innerText = "📡 Generating Code-Driven Asset Engine...";
 
-        const defaultSkeletonMap = {
-            "11": "mixamorigLeftArm",      
-            "12": "mixamorigRightArm",     
-            "13": "mixamorigLeftForeArm",  
-            "14": "mixamorigRightForeArm", 
-            "23": "mixamorigLeftUpLeg",    
-            "24": "mixamorigRightUpLeg",   
-            "25": "mixamorigLeftLeg",      
-            "26": "mixamorigRightLeg"      
-        };
+            const segmentHeight = 0.4;
+            const segmentCount = 3;
+            const height = segmentHeight * segmentCount;
+            const halfHeight = height * 0.5;
 
-        function loadStudioCharacter(url) {
-            document.getElementById('pipeline-loader').innerText = "📡 Hooking Character Grid Structure...";
+            const sizing = { segmentHeight, segmentCount, height, halfHeight };
             
-            gltfLoader.load(url, function(gltf) {
-                if (activeMesh) scene.remove(activeMesh);
-                activeMesh = gltf.scene;
-                
-                const boundingBox = new THREE.Box3().setFromObject(activeMesh);
-                const dimensions = boundingBox.getSize(new THREE.Vector3());
-                const correctionRatio = 1.75 / dimensions.y;
-                activeMesh.scale.set(correctionRatio, correctionRatio, correctionRatio);
-                activeMesh.position.set(0, 0, 0);
+            // Build cylindrical mesh structure geometry 
+            const geometry = new THREE.CylinderGeometry(0.06, 0.08, height, 16, segmentCount * 4);
+            const position = geometry.attributes.position;
+            
+            const vertexIndices = [];
+            const vertexWeights = [];
 
-                activeMesh.traverse(node => {
-                    if (node.isBone) {
-                        node.matrixAutoUpdate = true;
-                    }
-                });
+            for (let i = 0; i < position.count; i++) {
+                const y = position.getY(i) + halfHeight;
+                const index = Math.floor(y / segmentHeight);
+                const weight = (y % segmentHeight) / segmentHeight;
 
-                scene.add(activeMesh);
-                
-                Object.keys(defaultSkeletonMap).forEach(key => {
-                    const boneName = defaultSkeletonMap[key];
-                    const foundBone = activeMesh.getObjectByName(boneName);
-                    if (foundBone) {
-                        internalBoneObjects[key] = foundBone;
-                        
-                        const worldPosition = new THREE.Vector3();
-                        foundBone.getWorldPosition(worldPosition);
-                        
-                        const markerGeo = new THREE.SphereGeometry(0.02, 16, 16);
-                        const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64, depthTest: false });
-                        const sphereMesh = new THREE.Mesh(markerGeo, markerMat);
-                        sphereMesh.renderOrder = 999;
-                        scene.add(sphereMesh);
-                        visualMarkers[key] = sphereMesh;
+                vertexIndices.push(index, index + 1, 0, 0);
+                vertexWeights.push(1 - weight, weight, 0, 0);
+            }
 
-                        const btn = document.querySelector(`.bone-btn[data-joint="${key}"]`);
-                        if (btn) btn.classList.add('mapped');
-                    }
-                });
+            geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(vertexIndices, 4));
+            geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(vertexWeights, 4));
 
-                document.getElementById('pipeline-loader').innerText = "✅ Diagnostic Mode Active: Sliders Ready";
-                document.getElementById('pipeline-loader').style.background = "rgba(0, 255, 100, 0.1)";
-                
-                setupSliderListeners();
-            }, 
-            // Monitoring download progression explicitly
-            function(xhr) {
-                if (xhr.total > 0) {
-                    const pct = Math.round((xhr.loaded / xhr.total) * 100);
-                    document.getElementById('pipeline-loader').innerText = `📡 Downloading Studio Mesh: ${pct}%`;
-                }
-            },
-            // Catching silent fetch errors on the ui panel instantly
-            function(err) {
-                document.getElementById('pipeline-loader').innerText = "❌ Pipeline Stream Blocked by Security Policies";
-                document.getElementById('pipeline-loader').style.background = "rgba(255, 0, 0, 0.15)";
-                console.error("Studio Loader Exception:", err);
+            // Create bone hierarchies natively
+            const rootBone = new THREE.Bone();
+            rootBone.position.y = 0.5; // Lift up from floor grid
+            bones.push(rootBone);
+
+            let parentBone = rootBone;
+            for (let i = 0; i < sizing.segmentCount; i++) {
+                const bone = new THREE.Bone();
+                bone.position.y = sizing.segmentHeight;
+                parentBone.add(bone);
+                bones.push(bone);
+                parentBone = bone;
+            }
+
+            // Bind skeleton structure matrices
+            const skeleton = new THREE.Skeleton(bones);
+            const material = new THREE.MeshStandardMaterial({ 
+                color: 0x2255ff, 
+                wireframe: true,
+                roughness: 0.4 
             });
+
+            mesh = new THREE.SkinnedMesh(geometry, material);
+            mesh.add(bones[0]);
+            mesh.bind(skeleton);
+            scene.add(mesh);
+
+            // Append geometric debugging tracker dots to each joint vertex position
+            bones.forEach((bone, index) => {
+                if (index < 3) {
+                    const markerGeo = new THREE.SphereGeometry(0.025, 16, 16);
+                    const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64, depthTest: false });
+                    const sphere = new THREE.Mesh(markerGeo, markerMat);
+                    sphere.renderOrder = 999;
+                    scene.add(sphere);
+                    visualMarkers.push({ sphere, bone });
+
+                    const btn = document.getElementById(`btn-1${index + 1}`);
+                    if (btn) btn.classList.add('mapped');
+                }
+            });
+
+            document.getElementById('pipeline-loader').innerText = "✅ Direct Offline Engine Active: Sliders Live";
+            document.getElementById('pipeline-loader').style.background = "rgba(0, 255, 100, 0.1)";
+            
+            setupLocalListeners();
         }
 
-        function setupSliderListeners() {
+        function setupLocalListeners() {
+            // Base Joint (Left Shoulder Stand-in)
             document.getElementById('slider-shoulder-l').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-11').innerText = val + "°";
-                const radians = (val * Math.PI) / 180;
-                if (internalBoneObjects["11"]) {
-                    internalBoneObjects["11"].rotation.z = radians; 
-                }
+                bones[0].rotation.z = (val * Math.PI) / 180;
             });
 
+            // Mid Joint (Right Shoulder Stand-in)
             document.getElementById('slider-shoulder-r').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-12').innerText = val + "°";
-                const radians = (val * Math.PI) / 180;
-                if (internalBoneObjects["12"]) {
-                    internalBoneObjects["12"].rotation.z = -radians; 
-                }
+                bones[1].rotation.z = (val * Math.PI) / 180;
             });
 
-            document.getElementById('slider-hips').addEventListener('input', (e) => {
+            // Upper Hinge (Elbow Joint Stand-in)
+            document.getElementById('slider-elbow').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-23').innerText = val + "°";
-                const radians = (val * Math.PI) / 180;
-                if (internalBoneObjects["23"]) internalBoneObjects["23"].rotation.z = radians;
-                if (internalBoneObjects["24"]) internalBoneObjects["24"].rotation.z = -radians;
+                bones[2].rotation.x = (val * Math.PI) / 180;
             });
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            loadStudioCharacter(DEFAULT_MODEL_URL);
+            buildLocalProceduralRig();
         });
 
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
 
-            Object.keys(internalBoneObjects).forEach(key => {
-                if (visualMarkers[key] && internalBoneObjects[key]) {
-                    const worldPosition = new THREE.Vector3();
-                    internalBoneObjects[key].getWorldPosition(worldPosition);
-                    visualMarkers[key].position.copy(worldPosition);
-                }
+            // Track live bone coordinates to attach neon marker overlays
+            visualMarkers.forEach(item => {
+                const worldPos = new THREE.Vector3();
+                item.bone.getWorldPosition(worldPos);
+                item.sphere.position.copy(worldPos);
             });
 
             renderer.render(scene, camera);
