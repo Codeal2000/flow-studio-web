@@ -23,10 +23,8 @@
         h1 span { width: 8px; height: 8px; background: #007aff; border-radius: 50%; box-shadow: 0 0 10px #007aff; }
         .section-title { font-size: 0.8rem; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
         
-        /* System Pipeline Notification Banners */
         #pipeline-loader { background: rgba(0, 122, 255, 0.15); border: 1px solid #007aff; padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #fff; text-align: center; }
         
-        /* Drop Zones */
         .drop-zone {
             border: 2px dashed rgba(255, 255, 255, 0.1); border-radius: 10px;
             padding: 12px; text-align: center; cursor: pointer; background: rgba(255,255,255,0.01);
@@ -36,7 +34,6 @@
         .drop-zone p { font-size: 0.75rem; color: #888; pointer-events: none; }
         .drop-zone input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
         
-        /* Mixamo-style Bone Mapping UI */
         #mapping-panel { display: block; background: rgba(255,255,255,0.03); padding: 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
         .bone-selector { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
         .bone-btn { 
@@ -59,7 +56,6 @@
         
         #test-controls { display: none; background: rgba(0, 122, 255, 0.1); border: 1px solid #007aff; padding: 12px; border-radius: 8px; font-size: 0.85rem; text-align: center; margin-top: 10px; color: #00ff64; font-weight: 600; }
     </style>
-    <!-- Core Engine Content Delivery Nodes -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -71,7 +67,6 @@
         
         <div id="pipeline-loader">⚡ System initializing...</div>
 
-        <!-- File Ingestion Section -->
         <div>
             <div class="section-title">1. Swap Target Asset (Optional)</div>
             <div class="drop-zone">
@@ -83,7 +78,6 @@
         <div>
             <div class="section-title">2. Reference Tracking Footage</div>
             <div id="video-preview-container">
-                <!-- Using a lightweight, low-res default sample asset to save data footprint -->
                 <video id="video-preview" src="https://assets.mixkit.co/videos/preview/mixkit-man-holding-a-smartphone-in-his-hand-40845-large.mp4" controls muted loop></video>
             </div>
             <div class="drop-zone" style="margin-top: 8px;">
@@ -92,7 +86,6 @@
             </div>
         </div>
 
-        <!-- Mixamo Selection Interface Matrix -->
         <div id="mapping-panel">
             <div class="section-title">3. Mixamo Joint Target Placement</div>
             <p style="font-size: 0.72rem; color: #888; margin-bottom: 10px;">Select a joint below, then click directly on the 3D character mesh to position the layout marker.</p>
@@ -114,14 +107,13 @@
     <div id="canvas-container"></div>
 
     <script>
-        // --- VIEWPORT AND SCENE INITIALIZATION ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
         scene.fog = new THREE.FogExp2(0x050505, 0.04);
 
         const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 2, 4);
+        camera.position.set(0, 2, 3);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -135,21 +127,19 @@
         controls.dampingFactor = 0.05;
         controls.target.set(0, 1, 0);
 
-        // Lighting Rig
-        scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.4));
         const skyLight = new THREE.DirectionalLight(0xffffff, 1.2);
         skyLight.position.set(5, 10, 5);
         skyLight.castShadow = true;
         scene.add(skyLight);
         
-        const rimLight = new THREE.PointLight(0x007aff, 1.0, 10);
+        const rimLight = new THREE.PointLight(0x007aff, 1.2, 10);
         rimLight.position.set(-3, 2, -3);
         scene.add(rimLight);
 
         const grid = new THREE.GridHelper(40, 40, 0x1c1c1c, 0x0c0c0c);
         scene.add(grid);
 
-        // State Machine Management
         let activeMesh = null;
         let currentTargetJoint = "11"; 
         let runJumpingJacksSimulation = false;
@@ -164,11 +154,21 @@
         const raycaster = new THREE.Raycaster();
         const mouseVector = new THREE.Vector2();
 
-        // --- ASSET STREAMING PIPELINE INITIALIZATION ---
-        // Automatically streams a standard human baseline mannequin from public three.js sample assets on load
         const DEFAULT_MODEL_URL = "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Soldier.glb";
 
-        function loadStudioCharacter(url, isCustomFile = false) {
+        // Map internal structural names used by the default model
+        const defaultSkeletonMap = {
+            "11": "vanguard_LeftArm",      // Left Shoulder
+            "12": "vanguard_RightArm",     // Right Shoulder
+            "13": "vanguard_LeftForeArm",  // Left Elbow
+            "14": "vanguard_RightForeArm", // Right Elbow
+            "23": "vanguard_LeftUpLeg",    // Left Hip
+            "24": "vanguard_RightUpLeg",   // Right Hip
+            "25": "vanguard_LeftLeg",      // Left Knee
+            "26": "vanguard_RightLeg"      // Right Knee
+        };
+
+        function loadStudioCharacter(url) {
             document.getElementById('pipeline-loader').innerText = "📡 Streaming 3D Mannequin Template...";
             document.getElementById('pipeline-loader').style.background = "rgba(0, 122, 255, 0.15)";
             
@@ -178,13 +178,10 @@
                 runJumpingJacksSimulation = false;
                 document.getElementById('test-controls').style.display = 'none';
                 document.getElementById('lock-rig-btn').style.display = 'none';
-                
-                // Clear out mapped class designations from buttons
                 document.querySelectorAll('.bone-btn').forEach(b => b.classList.remove('mapped'));
                 
                 activeMesh = gltf.scene;
                 
-                // Scale normalizer bounding box logic
                 const boundingBox = new THREE.Box3().setFromObject(activeMesh);
                 const dimensions = boundingBox.getSize(new THREE.Vector3());
                 const correctionRatio = 1.75 / dimensions.y;
@@ -199,25 +196,29 @@
                 });
 
                 scene.add(activeMesh);
+                
+                // Directly link default skeleton bones via broad traversal search
+                Object.keys(defaultSkeletonMap).forEach(key => {
+                    const boneName = defaultSkeletonMap[key];
+                    const foundBone = activeMesh.getObjectByName(boneName);
+                    if (foundBone) {
+                        internalBoneObjects[key] = foundBone;
+                    }
+                });
+
                 document.getElementById('pipeline-loader').innerText = "✅ Studio Ready: Template Loaded";
                 document.getElementById('pipeline-loader').style.background = "rgba(0, 255, 100, 0.1)";
             }, 
             function(xhr) {
-                // Tracking loading progress percentages
                 if(xhr.total > 0) {
                     const percentage = Math.round((xhr.loaded / xhr.total) * 100);
                     document.getElementById('pipeline-loader').innerText = `📡 Downloading Asset: ${percentage}%`;
                 }
-            },
-            function(error) {
-                document.getElementById('pipeline-loader').innerText = "❌ Pipeline Stream Blocked";
-                console.error(error);
             });
         }
 
-        // Initialize default scene assets instantly on load
         window.addEventListener('DOMContentLoaded', () => {
-            loadStudioCharacter(DEFAULT_MODEL_URL, false);
+            loadStudioCharacter(DEFAULT_MODEL_URL);
         });
 
         // --- INTERACTIVE BONE MAPPING LOGIC ---
@@ -243,11 +244,6 @@
 
             if (intersections.length > 0) {
                 const pointOfIntersection = intersections[0].point;
-                let targetBone = intersections[0].object;
-                
-                while (targetBone && targetBone.type !== 'Bone' && targetBone.parent) {
-                    targetBone = targetBone.parent;
-                }
                 
                 if (!visualMarkers[currentTargetJoint]) {
                     const markerGeo = new THREE.SphereGeometry(0.03, 16, 16);
@@ -260,8 +256,15 @@
                 visualMarkers[currentTargetJoint].position.copy(pointOfIntersection);
                 explicitJointPositions[currentTargetJoint] = pointOfIntersection.clone();
                 
-                if (targetBone && targetBone.type === 'Bone') {
-                    internalBoneObjects[currentTargetJoint] = targetBone;
+                // If a user uploads a custom model, we try to grab the immediate structural parent bone
+                if (!internalBoneObjects[currentTargetJoint] || url !== DEFAULT_MODEL_URL) {
+                    let targetBone = intersections[0].object;
+                    while (targetBone && targetBone.type !== 'Bone' && targetBone.parent) {
+                        targetBone = targetBone.parent;
+                    }
+                    if (targetBone && targetBone.type === 'Bone') {
+                        internalBoneObjects[currentTargetJoint] = targetBone;
+                    }
                 }
 
                 const activeBtn = document.querySelector(`.bone-btn[data-joint="${currentTargetJoint}"]`);
@@ -284,33 +287,32 @@
         function animateJumpingJacks(time) {
             if (!runJumpingJacksSimulation) return;
             
-            const speed = 2.5;
+            const speed = 3.0;
+            // Linear cycle between 0 and 1
             const cycle = Math.abs(Math.sin(time * speed)); 
             
-            // Shoulder Rig Mapping Arc
-            const armArc = cycle * 1.8;
-            if (internalBoneObjects["11"]) internalBoneObjects["11"].rotation.z = armArc;
-            if (internalBoneObjects["12"]) internalBoneObjects["12"].rotation.z = -armArc;
+            // Transform angles along correct spatial planes using Euler rotations
+            // Arms swing up outwards along the Z-axis (up to ~1.5 Radians)
+            if (internalBoneObjects["11"]) internalBoneObjects["11"].rotation.z = cycle * 1.5;
+            if (internalBoneObjects["12"]) internalBoneObjects["12"].rotation.z = -cycle * 1.5;
             
-            // Elbow Rig Mapping Fold
-            const elbowArc = cycle * 0.4;
-            if (internalBoneObjects["13"]) internalBoneObjects["13"].rotation.x = elbowArc;
-            if (internalBoneObjects["14"]) internalBoneObjects["14"].rotation.x = elbowArc;
+            // Elbows bend slightly at the top peak of the jump arc
+            if (internalBoneObjects["13"]) internalBoneObjects["13"].rotation.y = -cycle * 0.5;
+            if (internalBoneObjects["14"]) internalBoneObjects["14"].rotation.y = cycle * 0.5;
 
-            // Hip Rig Mapping Spread
-            const legArc = cycle * 0.3;
-            if (internalBoneObjects["23"]) internalBoneObjects["23"].rotation.z = -legArc;
-            if (internalBoneObjects["24"]) internalBoneObjects["24"].rotation.z = legArc;
+            // Legs step wide open along the Z-axis
+            if (internalBoneObjects["23"]) internalBoneObjects["23"].rotation.z = -cycle * 0.35;
+            if (internalBoneObjects["24"]) internalBoneObjects["24"].rotation.z = cycle * 0.35;
             
-            // Anchor Syncer
+            // Track markers follow the joints smoothly in global world matrix space
             Object.keys(internalBoneObjects).forEach(jointKey => {
-                if (visualMarkers[jointKey]) {
+                if (visualMarkers[jointKey] && internalBoneObjects[jointKey]) {
                     visualMarkers[jointKey].position.setFromMatrixPosition(internalBoneObjects[jointKey].matrixWorld);
                 }
             });
         }
 
-        // --- MANUAL OVERRIDE INGESTION HOOPS ---
+        // --- OVERRIDE HOOPS ---
 
         document.getElementById('model-input').addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -320,7 +322,7 @@
             reader.readAsArrayBuffer(file);
             reader.onload = function(event) {
                 const blobUrl = URL.createObjectURL(new Blob([event.target.result]));
-                loadStudioCharacter(blobUrl, true);
+                loadStudioCharacter(blobUrl);
             };
         });
 
@@ -337,7 +339,6 @@
             Object.values(visualMarkers).forEach(m => m.material.color.setHex(0x007aff));
         });
 
-        // Standard Engine Ticking Loop
         function animate() {
             requestAnimationFrame(animate);
             const totalElapsedTime = clock.getElapsedTime();
