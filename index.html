@@ -53,6 +53,8 @@
         
         .action-btn { background: #007aff; color: white; border: none; padding: 12px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; width: 100%; margin-top: 10px; display: none; transition: background 0.2s; }
         .action-btn:hover { background: #0056b3; }
+        
+        #test-controls { display: none; background: rgba(0, 122, 255, 0.1); border: 1px solid #007aff; padding: 12px; border-radius: 8px; font-size: 0.85rem; text-align: center; margin-top: 10px; color: #00ff64; font-weight: 600; }
     </style>
     <!-- Core Engine Content Delivery Nodes -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -99,6 +101,7 @@
                 <button class="bone-btn" data-joint="26">Right Knee <span class="marker-dot"></span></button>
             </div>
             <button id="lock-rig-btn" class="action-btn">Initialize Retargeting Engine</button>
+            <div id="test-controls">🏃 MOTIONS RUNNING: JUMPING JACKS TEST</div>
         </div>
     </div>
 
@@ -143,9 +146,14 @@
         // State Machine Management
         let activeMesh = null;
         let currentTargetJoint = "11"; 
-        const visualMarkers = {}; // Holds 3D mesh points placed by user
-        const explicitJointPositions = {}; // Stores explicit vector maps
+        let runJumpingJacksSimulation = false;
+        
+        const visualMarkers = {};          // Holds the visible spherical visual indicators
+        const explicitJointPositions = {}; // Stores explicit vector maps calculated from mesh clicks
+        const internalBoneObjects = {};     // Links marker tokens directly to internal character GLTF bones
+        
         const gltfLoader = new THREE.GLTFLoader();
+        const clock = new THREE.Clock();
         
         // Raycaster Setup for Precision Snapping
         const raycaster = new THREE.Raycaster();
@@ -153,7 +161,6 @@
 
         // --- INTERACTIVE BONE MAPPING LOGIC ---
         
-        // Handle Sidebar Selection Clicks
         document.querySelectorAll('.bone-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.bone-btn').forEach(b => b.classList.remove('active'));
@@ -163,13 +170,10 @@
             });
         });
 
-        // Click Detection on the 3D Character Mesh
         window.addEventListener('click', (event) => {
-            // Block canvas clicks if clicking the sidebar overlay panel
             if (event.clientX < 390 && event.clientY < window.innerHeight) return;
             if (!activeMesh) return;
 
-            // Normalize coordinate spaces
             mouseVector.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouseVector.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -178,11 +182,16 @@
 
             if (intersections.length > 0) {
                 const pointOfIntersection = intersections[0].point;
+                let targetBone = intersections[0].object;
                 
-                // Drop or move the visual holographic 3D marker sphere
+                // Traverse upwards to find the closest valid structural Bone container object
+                while (targetBone && targetBone.type !== 'Bone' && targetBone.parent) {
+                    targetBone = targetBone.parent;
+                }
+                
                 if (!visualMarkers[currentTargetJoint]) {
-                    const markerGeo = new THREE.SphereGeometry(0.04, 16, 16);
-                    const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64, wireframe: false });
+                    const markerGeo = new THREE.SphereGeometry(0.03, 16, 16);
+                    const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64 });
                     const sphereMesh = new THREE.Mesh(markerGeo, markerMat);
                     scene.add(sphereMesh);
                     visualMarkers[currentTargetJoint] = sphereMesh;
@@ -190,12 +199,15 @@
                 
                 visualMarkers[currentTargetJoint].position.copy(pointOfIntersection);
                 explicitJointPositions[currentTargetJoint] = pointOfIntersection.clone();
+                
+                // Directly bind the structural mesh bone to our internal marker lookup map
+                if (targetBone && targetBone.type === 'Bone') {
+                    internalBoneObjects[currentTargetJoint] = targetBone;
+                }
 
-                // Style side button as fully mapped
                 const activeBtn = document.querySelector(`.bone-btn[data-joint="${currentTargetJoint}"]`);
                 activeBtn.classList.add('mapped');
                 
-                // Check if pipeline has acquired all required joint tokens
                 checkMappingCompletion();
             }
         });
@@ -208,9 +220,43 @@
             }
         }
 
+        // --- MATH JUMPING JACKS RETARGETING CALCULATIONS ---
+        
+        function animateJumpingJacks(time) {
+            if (!runJumpingJacksSimulation) return;
+            
+            // Build rhythmic cycles using a smooth absolute Sine wave
+            const speed = 2.5;
+            const cycle = Math.abs(Math.sin(time * speed)); 
+            
+            // 1. Shoulder Calculations (Left: Joint 11, Right: Joint 12)
+            // Arm rotation arc along the Z axis (0 to ~1.8 Radians upwards)
+            const armArc = cycle * 1.8;
+            if (internalBoneObjects["11"]) internalBoneObjects["11"].rotation.z = armArc;
+            if (internalBoneObjects["12"]) internalBoneObjects["12"].rotation.z = -armArc;
+            
+            // 2. Elbow Calculations (Left: Joint 13, Right: Joint 14)
+            // Add slight structural folding at the top of the jumping jack cycle
+            const elbowArc = cycle * 0.4;
+            if (internalBoneObjects["13"]) internalBoneObjects["13"].rotation.x = elbowArc;
+            if (internalBoneObjects["14"]) internalBoneObjects["14"].rotation.x = elbowArc;
+
+            // 3. Hip/Leg Calculations (Left: Joint 23, Right: Joint 24)
+            // Striding legs outwards and inwards along the frontal plane (~0.4 Radians max spread)
+            const legArc = cycle * 0.4;
+            if (internalBoneObjects["23"]) internalBoneObjects["23"].rotation.z = -legArc;
+            if (internalBoneObjects["24"]) internalBoneObjects["24"].rotation.z = legArc;
+            
+            // Synchronize the external visual holographic tracker helper markers to follow the bones
+            Object.keys(internalBoneObjects).forEach(jointKey => {
+                if (visualMarkers[jointKey]) {
+                    visualMarkers[jointKey].position.setFromMatrixPosition(internalBoneObjects[jointKey].matrixWorld);
+                }
+            });
+        }
+
         // --- DATA INGESTION LOOPS ---
 
-        // Ingest GLTF / GLB Characters
         document.getElementById('model-input').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -219,14 +265,14 @@
             reader.readAsArrayBuffer(file);
             reader.onload = function(event) {
                 if (activeMesh) scene.remove(activeMesh);
-                
-                // Wipe previous markers if swapping assets
                 Object.values(visualMarkers).forEach(m => scene.remove(m));
+                runJumpingJacksSimulation = false;
+                document.getElementById('test-controls').style.display = 'none';
+                document.getElementById('lock-rig-btn').style.display = 'none';
                 
                 gltfLoader.parse(event.target.result, '', function(gltf) {
                     activeMesh = gltf.scene;
                     
-                    // Normalize Bounding Space Heights to uniform human meters
                     const boundingBox = new THREE.Box3().setFromObject(activeMesh);
                     const dimensions = boundingBox.getSize(new THREE.Vector3());
                     const correctionRatio = 1.75 / dimensions.y;
@@ -246,7 +292,6 @@
             };
         });
 
-        // Ingest Video Footages
         document.getElementById('video-input').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -254,16 +299,24 @@
             document.getElementById('video-preview-container').style.display = 'block';
         });
 
-        // Rig Initialization Hook
+        // Trigger Test Mode Execution via the Rig Button
         document.getElementById('lock-rig-btn').addEventListener('click', () => {
-            alert("Rig Mapping Array Saved! Character structure coordinates bound smoothly to the motion solver.");
-            // Turn markers into clean blue anchors
+            runJumpingJacksSimulation = true;
+            document.getElementById('lock-rig-btn').style.display = 'none';
+            document.getElementById('test-controls').style.display = 'block';
+            
+            // Shift helper tracking anchors to cyan to signal dynamic computation mode
             Object.values(visualMarkers).forEach(m => m.material.color.setHex(0x007aff));
         });
 
         // Standard Engine Ticking Loop
         function animate() {
             requestAnimationFrame(animate);
+            const totalElapsedTime = clock.getElapsedTime();
+            
+            // Core Execution Hook
+            animateJumpingJacks(totalElapsedTime);
+            
             controls.update();
             renderer.render(scene, camera);
         }
