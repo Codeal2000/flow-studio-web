@@ -25,36 +25,22 @@
         
         #pipeline-loader { background: rgba(0, 122, 255, 0.15); border: 1px solid #007aff; padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #fff; text-align: center; }
         
-        .drop-zone {
-            border: 2px dashed rgba(255, 255, 255, 0.1); border-radius: 10px;
-            padding: 12px; text-align: center; cursor: pointer; background: rgba(255,255,255,0.01);
-            transition: all 0.2s ease; position: relative;
-        }
-        .drop-zone:hover { border-color: #007aff; background: rgba(0, 122, 255, 0.04); }
-        .drop-zone p { font-size: 0.75rem; color: #888; pointer-events: none; }
-        .drop-zone input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        /* Manual Manipulation Sliders */
+        .slider-group { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 12px; }
+        .control-row { display: flex; flex-direction: column; gap: 4px; }
+        .control-row label { font-size: 0.75rem; color: #aaa; display: flex; justify-content: space-between; }
+        .control-row input { width: 100%; accent-color: #007aff; cursor: pointer; background: #222; height: 6px; border-radius: 3px; outline: none; }
         
         #mapping-panel { display: block; background: rgba(255,255,255,0.03); padding: 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
         .bone-selector { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
         .bone-btn { 
             background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); 
             color: #ccc; padding: 10px; border-radius: 6px; text-align: left; font-size: 0.85rem; 
-            cursor: pointer; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center;
+            display: flex; justify-content: space-between; align-items: center;
         }
-        .bone-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-        .bone-btn.active { background: rgba(0, 122, 255, 0.2); border-color: #007aff; color: #fff; }
         .bone-btn.mapped { border-color: #00ff64; color: #00ff64; }
         .marker-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; }
-        .bone-btn.active .marker-dot { background: #007aff; box-shadow: 0 0 8px #007aff; }
         .bone-btn.mapped .marker-dot { background: #00ff64; box-shadow: 0 0 8px #00ff64; }
-        
-        #video-preview-container { width: 100%; border-radius: 8px; overflow: hidden; background: #000; display: block; border: 1px solid rgba(255,255,255,0.1); margin-top: 10px; }
-        #video-preview { width: 100%; height: auto; display: block; }
-        
-        .action-btn { background: #007aff; color: white; border: none; padding: 12px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; width: 100%; margin-top: 10px; display: none; transition: background 0.2s; }
-        .action-btn:hover { background: #0056b3; }
-        
-        #test-controls { display: none; background: rgba(0, 122, 255, 0.1); border: 1px solid #007aff; padding: 12px; border-radius: 8px; font-size: 0.85rem; text-align: center; margin-top: 10px; color: #00ff64; font-weight: 600; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -67,40 +53,37 @@
         
         <div id="pipeline-loader">⚡ System initializing...</div>
 
+        <!-- Rig Diagnosis Sliders -->
         <div>
-            <div class="section-title">1. Swap Target Asset (Optional)</div>
-            <div class="drop-zone">
-                <p>Drop custom .gltf/.glb to override default mesh</p>
-                <input type="file" id="model-input" accept=".gltf,.glb">
-            </div>
-        </div>
-
-        <div>
-            <div class="section-title">2. Reference Tracking Footage</div>
-            <div id="video-preview-container">
-                <video id="video-preview" src="https://assets.mixkit.co/videos/preview/mixkit-man-holding-a-smartphone-in-his-hand-40845-large.mp4" controls muted loop></video>
-            </div>
-            <div class="drop-zone" style="margin-top: 8px;">
-                <p>Drop custom footage to override video</p>
-                <input type="file" id="video-input" accept="video/*">
+            <div class="section-title">Manual Bone Manipulation Diagnostic</div>
+            <div class="slider-group">
+                <div class="control-row">
+                    <label><span>Left Shoulder Roll (Z Axis)</span><span id="val-11">0°</span></label>
+                    <input type="range" id="slider-shoulder-l" min="-90" max="135" value="0">
+                </div>
+                <div class="control-row">
+                    <label><span>Right Shoulder Roll (Z Axis)</span><span id="val-12">0°</span></label>
+                    <input type="range" id="slider-shoulder-r" min="-90" max="135" value="0">
+                </div>
+                <div class="control-row">
+                    <label><span>Hip Spread (Legs Spread)</span><span id="val-23">0°</span></label>
+                    <input type="range" id="slider-hips" min="0" max="60" value="0">
+                </div>
             </div>
         </div>
 
         <div id="mapping-panel">
-            <div class="section-title">3. Mixamo Joint Target Placement</div>
-            <p style="font-size: 0.72rem; color: #888; margin-bottom: 10px;">Joint layout is automatically configured for the studio mannequin template.</p>
+            <div class="section-title">Joint Reference Map Status</div>
             <div class="bone-selector">
-                <button class="bone-btn active" data-joint="11">Left Shoulder <span class="marker-dot"></span></button>
-                <button class="bone-btn" data-joint="12">Right Shoulder <span class="marker-dot"></span></button>
-                <button class="bone-btn" data-joint="13">Left Elbow <span class="marker-dot"></span></button>
-                <button class="bone-btn" data-joint="14">Right Elbow <span class="marker-dot"></span></button>
-                <button class="bone-btn" data-joint="23">Left Hip Joint <span class="marker-dot"></span></button>
-                <button class="bone-btn" data-joint="24">Right Hip Joint <span class="marker-dot"></span></button>
-                <button class="bone-btn" data-joint="25">Left Knee <span class="marker-dot"></span></button>
-                <button class="bone-btn" data-joint="26">Right Knee <span class="marker-dot"></span></button>
+                <div class="bone-btn" data-joint="11">Left Shoulder <span class="marker-dot"></span></div>
+                <div class="bone-btn" data-joint="12">Right Shoulder <span class="marker-dot"></span></div>
+                <div class="bone-btn" data-joint="13">Left Elbow <span class="marker-dot"></span></div>
+                <div class="bone-btn" data-joint="14">Right Elbow <span class="marker-dot"></span></div>
+                <div class="bone-btn" data-joint="23">Left Hip Joint <span class="marker-dot"></span></div>
+                <div class="bone-btn" data-joint="24">Right Hip Joint <span class="marker-dot"></span></div>
+                <div class="bone-btn" data-joint="25">Left Knee <span class="marker-dot"></span></div>
+                <div class="bone-btn" data-joint="26">Right Knee <span class="marker-dot"></span></div>
             </div>
-            <button id="lock-rig-btn" class="action-btn">Initialize Retargeting Engine</button>
-            <div id="test-controls">🏃 MOTIONS RUNNING: JUMPING JACKS TEST</div>
         </div>
     </div>
 
@@ -110,16 +93,14 @@
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
-        scene.fog = new THREE.FogExp2(0x050505, 0.04);
 
-        const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 1.8, 2.5);
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 1.4, 2.5);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         container.appendChild(renderer.domElement);
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -127,33 +108,19 @@
         controls.dampingFactor = 0.05;
         controls.target.set(0, 1, 0);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
         const skyLight = new THREE.DirectionalLight(0xffffff, 1.2);
         skyLight.position.set(5, 10, 5);
-        skyLight.castShadow = true;
         scene.add(skyLight);
         
-        const rimLight = new THREE.PointLight(0x007aff, 1.2, 10);
-        rimLight.position.set(-3, 2, -3);
-        scene.add(rimLight);
-
         const grid = new THREE.GridHelper(40, 40, 0x1c1c1c, 0x0c0c0c);
         scene.add(grid);
 
         let activeMesh = null;
-        let currentTargetJoint = "11"; 
-        let runJumpingJacksSimulation = false;
-        let isUsingDefaultTemplate = true;
-        
         const visualMarkers = {};          
-        const explicitJointPositions = {}; 
         const internalBoneObjects = {};     
         
         const gltfLoader = new THREE.GLTFLoader();
-        const clock = new THREE.Clock();
-        
-        const raycaster = new THREE.Raycaster();
-        const mouseVector = new THREE.Vector2();
 
         const DEFAULT_MODEL_URL = "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Soldier.glb";
 
@@ -169,81 +136,86 @@
         };
 
         function loadStudioCharacter(url) {
-            document.getElementById('pipeline-loader').innerText = "📡 Streaming 3D Mannequin Template...";
-            document.getElementById('pipeline-loader').style.background = "rgba(0, 122, 255, 0.15)";
+            document.getElementById('pipeline-loader').innerText = "📡 Hooking Character Grid Structure...";
             
             gltfLoader.load(url, function(gltf) {
                 if (activeMesh) scene.remove(activeMesh);
-                Object.values(visualMarkers).forEach(m => scene.remove(m));
-                runJumpingJacksSimulation = false;
-                document.getElementById('test-controls').style.display = 'none';
-                document.getElementById('lock-rig-btn').style.display = 'none';
-                document.querySelectorAll('.bone-btn').forEach(b => b.classList.remove('mapped'));
-                
                 activeMesh = gltf.scene;
                 
+                // Normalizing scale metrics
                 const boundingBox = new THREE.Box3().setFromObject(activeMesh);
                 const dimensions = boundingBox.getSize(new THREE.Vector3());
                 const correctionRatio = 1.75 / dimensions.y;
                 activeMesh.scale.set(correctionRatio, correctionRatio, correctionRatio);
                 activeMesh.position.set(0, 0, 0);
 
+                // FORCE DEACTIVATION of any structural constraint components
                 activeMesh.traverse(node => {
-                    if (node.isMesh) {
-                        node.castShadow = true;
-                        node.receiveShadow = true;
+                    if (node.isBone) {
+                        node.matrixAutoUpdate = true; // Tell Three.js to accept custom programmatic overrides
                     }
                 });
 
                 scene.add(activeMesh);
                 
-                // Direct bone link loop
+                // Link bones up
                 Object.keys(defaultSkeletonMap).forEach(key => {
                     const boneName = defaultSkeletonMap[key];
                     const foundBone = activeMesh.getObjectByName(boneName);
                     if (foundBone) {
                         internalBoneObjects[key] = foundBone;
-                    }
-                });
-
-                // --- AUTO RIGGING ROUTINE ENGINE ---
-                if (isUsingDefaultTemplate) {
-                    // Update matrix worlds to compute precise world spatial scales
-                    activeMesh.updateMatrixWorld(true);
-                    
-                    Object.keys(internalBoneObjects).forEach(key => {
-                        const targetBone = internalBoneObjects[key];
+                        
+                        // Generate explicit anchor markers on screen
                         const worldPosition = new THREE.Vector3();
-                        targetBone.getWorldPosition(worldPosition);
+                        foundBone.getWorldPosition(worldPosition);
                         
-                        // Instantly map coordinate matrices internally
-                        explicitJointPositions[key] = worldPosition.clone();
-                        
-                        // Generate visual helper spherical nodes on screen automatically
-                        const markerGeo = new THREE.SphereGeometry(0.025, 16, 16);
+                        const markerGeo = new THREE.SphereGeometry(0.02, 16, 16);
                         const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64 });
                         const sphereMesh = new THREE.Mesh(markerGeo, markerMat);
                         sphereMesh.position.copy(worldPosition);
                         scene.add(sphereMesh);
                         visualMarkers[key] = sphereMesh;
-                        
-                        // Toggle UI states to verified mapped designations
-                        const UIButton = document.querySelector(`.bone-btn[data-joint="${key}"]`);
-                        if (UIButton) UIButton.classList.add('mapped');
-                    });
-                    
-                    // Instantly unveil the initialization button
-                    document.getElementById('lock-rig-btn').style.display = 'block';
-                }
 
-                document.getElementById('pipeline-loader').innerText = "✅ Studio Ready: Template Auto-Rigged";
+                        const btn = document.querySelector(`.bone-btn[data-joint="${key}"]`);
+                        if (btn) btn.classList.add('mapped');
+                    }
+                });
+
+                document.getElementById('pipeline-loader').innerText = "✅ Diagnostic Mode Active: Sliders Ready";
                 document.getElementById('pipeline-loader').style.background = "rgba(0, 255, 100, 0.1)";
-            }, 
-            function(xhr) {
-                if(xhr.total > 0) {
-                    const percentage = Math.round((xhr.loaded / xhr.total) * 100);
-                    document.getElementById('pipeline-loader').innerText = `📡 Downloading Asset: ${percentage}%`;
+                
+                setupSliderListeners();
+            });
+        }
+
+        function setupSliderListeners() {
+            // Left Shoulder Slider Hook
+            document.getElementById('slider-shoulder-l').addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('val-11').innerText = val + "°";
+                const radians = (val * Math.PI) / 180;
+                if (internalBoneObjects["11"]) {
+                    internalBoneObjects["11"].rotation.z = radians; // Directly manipulation test
                 }
+            });
+
+            // Right Shoulder Slider Hook
+            document.getElementById('slider-shoulder-r').addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('val-12').innerText = val + "°";
+                const radians = (val * Math.PI) / 180;
+                if (internalBoneObjects["12"]) {
+                    internalBoneObjects["12"].rotation.z = -radians; 
+                }
+            });
+
+            // Dual Hip Spread Slider Hook
+            document.getElementById('slider-hips').addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('val-23').innerText = val + "°";
+                const radians = (val * Math.PI) / 180;
+                if (internalBoneObjects["23"]) internalBoneObjects["23"].rotation.z = -radians;
+                if (internalBoneObjects["24"]) internalBoneObjects["24"].rotation.z = radians;
             });
         }
 
@@ -251,125 +223,17 @@
             loadStudioCharacter(DEFAULT_MODEL_URL);
         });
 
-        // --- INTERACTIVE MANUAL CLICK OVERRIDES (For Custom Uploads Only) ---
-        
-        document.querySelectorAll('.bone-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                document.querySelectorAll('.bone-btn').forEach(b => b.classList.remove('active'));
-                const element = e.currentTarget;
-                element.classList.add('active');
-                currentTargetJoint = element.getAttribute('data-joint');
-            });
-        });
-
-        window.addEventListener('click', (event) => {
-            if (event.clientX < 390 && event.clientY < window.innerHeight) return;
-            if (!activeMesh) return;
-
-            mouseVector.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouseVector.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-            raycaster.setFromCamera(mouseVector, camera);
-            const intersections = raycaster.intersectObject(activeMesh, true);
-
-            if (intersections.length > 0) {
-                const pointOfIntersection = intersections[0].point;
-                
-                if (!visualMarkers[currentTargetJoint]) {
-                    const markerGeo = new THREE.SphereGeometry(0.03, 16, 16);
-                    const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64 });
-                    const sphereMesh = new THREE.Mesh(markerGeo, markerMat);
-                    scene.add(sphereMesh);
-                    visualMarkers[currentTargetJoint] = sphereMesh;
-                }
-                
-                visualMarkers[currentTargetJoint].position.copy(pointOfIntersection);
-                explicitJointPositions[currentTargetJoint] = pointOfIntersection.clone();
-                
-                let targetBone = intersections[0].object;
-                while (targetBone && targetBone.type !== 'Bone' && targetBone.parent) {
-                    targetBone = targetBone.parent;
-                }
-                if (targetBone && targetBone.type === 'Bone') {
-                    internalBoneObjects[currentTargetJoint] = targetBone;
-                }
-
-                const activeBtn = document.querySelector(`.bone-btn[data-joint="${currentTargetJoint}"]`);
-                activeBtn.classList.add('mapped');
-                
-                checkMappingCompletion();
-            }
-        });
-
-        function checkMappingCompletion() {
-            const requiredTokens = ["11", "12", "13", "14", "23", "24", "25", "26"];
-            const completed = requiredTokens.every(token => explicitJointPositions[token] !== undefined);
-            if (completed) {
-                document.getElementById('lock-rig-btn').style.display = 'block';
-            }
-        }
-
-        // --- MATH JUMPING JACKS RETARGETING CALCULATIONS ---
-        
-        function animateJumpingJacks(time) {
-            if (!runJumpingJacksSimulation) return;
-            
-            const speed = 3.0;
-            const cycle = Math.abs(Math.sin(time * speed)); 
-            
-            // Frontal plane transforms
-            if (internalBoneObjects["11"]) internalBoneObjects["11"].rotation.z = cycle * 1.5;
-            if (internalBoneObjects["12"]) internalBoneObjects["12"].rotation.z = -cycle * 1.5;
-            
-            if (internalBoneObjects["13"]) internalBoneObjects["13"].rotation.y = -cycle * 0.5;
-            if (internalBoneObjects["14"]) internalBoneObjects["14"].rotation.y = cycle * 0.5;
-
-            if (internalBoneObjects["23"]) internalBoneObjects["23"].rotation.z = -cycle * 0.35;
-            if (internalBoneObjects["24"]) internalBoneObjects["24"].rotation.z = cycle * 0.35;
-            
-            // Track markers follow the joints smoothly in global world matrix space
-            Object.keys(internalBoneObjects).forEach(jointKey => {
-                if (visualMarkers[jointKey] && internalBoneObjects[jointKey]) {
-                    visualMarkers[jointKey].position.setFromMatrixPosition(internalBoneObjects[jointKey].matrixWorld);
-                }
-            });
-        }
-
-        // --- MANIPULATION OVERRIDES ---
-
-        document.getElementById('model-input').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            isUsingDefaultTemplate = false; // Kill auto-rig pipeline for custom meshes
-            const reader = new FileReader();
-            reader.readAsArrayBuffer(file);
-            reader.onload = function(event) {
-                const blobUrl = URL.createObjectURL(new Blob([event.target.result]));
-                loadStudioCharacter(blobUrl);
-            };
-        });
-
-        document.getElementById('video-input').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            document.getElementById('video-preview').src = URL.createObjectURL(file);
-        });
-
-        document.getElementById('lock-rig-btn').addEventListener('click', () => {
-            runJumpingJacksSimulation = true;
-            document.getElementById('lock-rig-btn').style.display = 'none';
-            document.getElementById('test-controls').style.display = 'block';
-            Object.values(visualMarkers).forEach(m => m.material.color.setHex(0x007aff));
-        });
-
         function animate() {
             requestAnimationFrame(animate);
-            const totalElapsedTime = clock.getElapsedTime();
-            
-            animateJumpingJacks(totalElapsedTime);
-            
             controls.update();
+
+            // Track markers should strictly follow the bones real-time positions
+            Object.keys(internalBoneObjects).forEach(key => {
+                if (visualMarkers[key] && internalBoneObjects[key]) {
+                    visualMarkers[key].position.setFromMatrixPosition(internalBoneObjects[key].matrixWorld);
+                }
+            });
+
             renderer.render(scene, camera);
         }
         animate();
