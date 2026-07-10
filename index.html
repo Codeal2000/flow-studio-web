@@ -88,7 +88,7 @@
 
         <div id="mapping-panel">
             <div class="section-title">3. Mixamo Joint Target Placement</div>
-            <p style="font-size: 0.72rem; color: #888; margin-bottom: 10px;">Select a joint below, then click directly on the 3D character mesh to position the layout marker.</p>
+            <p style="font-size: 0.72rem; color: #888; margin-bottom: 10px;">Joint layout is automatically configured for the studio mannequin template.</p>
             <div class="bone-selector">
                 <button class="bone-btn active" data-joint="11">Left Shoulder <span class="marker-dot"></span></button>
                 <button class="bone-btn" data-joint="12">Right Shoulder <span class="marker-dot"></span></button>
@@ -113,7 +113,7 @@
         scene.fog = new THREE.FogExp2(0x050505, 0.04);
 
         const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 2, 3);
+        camera.position.set(0, 1.8, 2.5);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -143,6 +143,7 @@
         let activeMesh = null;
         let currentTargetJoint = "11"; 
         let runJumpingJacksSimulation = false;
+        let isUsingDefaultTemplate = true;
         
         const visualMarkers = {};          
         const explicitJointPositions = {}; 
@@ -156,16 +157,15 @@
 
         const DEFAULT_MODEL_URL = "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Soldier.glb";
 
-        // Map internal structural names used by the default model
         const defaultSkeletonMap = {
-            "11": "vanguard_LeftArm",      // Left Shoulder
-            "12": "vanguard_RightArm",     // Right Shoulder
-            "13": "vanguard_LeftForeArm",  // Left Elbow
-            "14": "vanguard_RightForeArm", // Right Elbow
-            "23": "vanguard_LeftUpLeg",    // Left Hip
-            "24": "vanguard_RightUpLeg",   // Right Hip
-            "25": "vanguard_LeftLeg",      // Left Knee
-            "26": "vanguard_RightLeg"      // Right Knee
+            "11": "vanguard_LeftArm",      
+            "12": "vanguard_RightArm",     
+            "13": "vanguard_LeftForeArm",  
+            "14": "vanguard_RightForeArm", 
+            "23": "vanguard_LeftUpLeg",    
+            "24": "vanguard_RightUpLeg",   
+            "25": "vanguard_LeftLeg",      
+            "26": "vanguard_RightLeg"      
         };
 
         function loadStudioCharacter(url) {
@@ -197,7 +197,7 @@
 
                 scene.add(activeMesh);
                 
-                // Directly link default skeleton bones via broad traversal search
+                // Direct bone link loop
                 Object.keys(defaultSkeletonMap).forEach(key => {
                     const boneName = defaultSkeletonMap[key];
                     const foundBone = activeMesh.getObjectByName(boneName);
@@ -206,7 +206,37 @@
                     }
                 });
 
-                document.getElementById('pipeline-loader').innerText = "✅ Studio Ready: Template Loaded";
+                // --- AUTO RIGGING ROUTINE ENGINE ---
+                if (isUsingDefaultTemplate) {
+                    // Update matrix worlds to compute precise world spatial scales
+                    activeMesh.updateMatrixWorld(true);
+                    
+                    Object.keys(internalBoneObjects).forEach(key => {
+                        const targetBone = internalBoneObjects[key];
+                        const worldPosition = new THREE.Vector3();
+                        targetBone.getWorldPosition(worldPosition);
+                        
+                        // Instantly map coordinate matrices internally
+                        explicitJointPositions[key] = worldPosition.clone();
+                        
+                        // Generate visual helper spherical nodes on screen automatically
+                        const markerGeo = new THREE.SphereGeometry(0.025, 16, 16);
+                        const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64 });
+                        const sphereMesh = new THREE.Mesh(markerGeo, markerMat);
+                        sphereMesh.position.copy(worldPosition);
+                        scene.add(sphereMesh);
+                        visualMarkers[key] = sphereMesh;
+                        
+                        // Toggle UI states to verified mapped designations
+                        const UIButton = document.querySelector(`.bone-btn[data-joint="${key}"]`);
+                        if (UIButton) UIButton.classList.add('mapped');
+                    });
+                    
+                    // Instantly unveil the initialization button
+                    document.getElementById('lock-rig-btn').style.display = 'block';
+                }
+
+                document.getElementById('pipeline-loader').innerText = "✅ Studio Ready: Template Auto-Rigged";
                 document.getElementById('pipeline-loader').style.background = "rgba(0, 255, 100, 0.1)";
             }, 
             function(xhr) {
@@ -221,7 +251,7 @@
             loadStudioCharacter(DEFAULT_MODEL_URL);
         });
 
-        // --- INTERACTIVE BONE MAPPING LOGIC ---
+        // --- INTERACTIVE MANUAL CLICK OVERRIDES (For Custom Uploads Only) ---
         
         document.querySelectorAll('.bone-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -256,15 +286,12 @@
                 visualMarkers[currentTargetJoint].position.copy(pointOfIntersection);
                 explicitJointPositions[currentTargetJoint] = pointOfIntersection.clone();
                 
-                // If a user uploads a custom model, we try to grab the immediate structural parent bone
-                if (!internalBoneObjects[currentTargetJoint] || url !== DEFAULT_MODEL_URL) {
-                    let targetBone = intersections[0].object;
-                    while (targetBone && targetBone.type !== 'Bone' && targetBone.parent) {
-                        targetBone = targetBone.parent;
-                    }
-                    if (targetBone && targetBone.type === 'Bone') {
-                        internalBoneObjects[currentTargetJoint] = targetBone;
-                    }
+                let targetBone = intersections[0].object;
+                while (targetBone && targetBone.type !== 'Bone' && targetBone.parent) {
+                    targetBone = targetBone.parent;
+                }
+                if (targetBone && targetBone.type === 'Bone') {
+                    internalBoneObjects[currentTargetJoint] = targetBone;
                 }
 
                 const activeBtn = document.querySelector(`.bone-btn[data-joint="${currentTargetJoint}"]`);
@@ -288,19 +315,15 @@
             if (!runJumpingJacksSimulation) return;
             
             const speed = 3.0;
-            // Linear cycle between 0 and 1
             const cycle = Math.abs(Math.sin(time * speed)); 
             
-            // Transform angles along correct spatial planes using Euler rotations
-            // Arms swing up outwards along the Z-axis (up to ~1.5 Radians)
+            // Frontal plane transforms
             if (internalBoneObjects["11"]) internalBoneObjects["11"].rotation.z = cycle * 1.5;
             if (internalBoneObjects["12"]) internalBoneObjects["12"].rotation.z = -cycle * 1.5;
             
-            // Elbows bend slightly at the top peak of the jump arc
             if (internalBoneObjects["13"]) internalBoneObjects["13"].rotation.y = -cycle * 0.5;
             if (internalBoneObjects["14"]) internalBoneObjects["14"].rotation.y = cycle * 0.5;
 
-            // Legs step wide open along the Z-axis
             if (internalBoneObjects["23"]) internalBoneObjects["23"].rotation.z = -cycle * 0.35;
             if (internalBoneObjects["24"]) internalBoneObjects["24"].rotation.z = cycle * 0.35;
             
@@ -312,12 +335,13 @@
             });
         }
 
-        // --- OVERRIDE HOOPS ---
+        // --- MANIPULATION OVERRIDES ---
 
         document.getElementById('model-input').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
 
+            isUsingDefaultTemplate = false; // Kill auto-rig pipeline for custom meshes
             const reader = new FileReader();
             reader.readAsArrayBuffer(file);
             reader.onload = function(event) {
