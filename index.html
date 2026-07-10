@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flow Studio Clone - Advanced Character Mapper</title>
+    <title>Flow Studio Clone - Bone Test Rig</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background-color: #050505; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
         
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         
-        /* Glassmorphism Panel */
+        /* Interactive Side Panel */
         #ui-sidebar { 
             position: absolute; top: 20px; left: 20px; z-index: 10; 
-            background: rgba(12, 12, 12, 0.75); width: 350px; max-height: calc(100vh - 40px);
+            background: rgba(12, 12, 12, 0.8); width: 350px; max-height: calc(100vh - 40px);
             padding: 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); 
             backdrop-filter: blur(20px); display: flex; flex-direction: column; gap: 20px;
             overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.6);
@@ -25,7 +25,7 @@
         
         #pipeline-loader { background: rgba(0, 122, 255, 0.15); border: 1px solid #007aff; padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #fff; text-align: center; }
         
-        /* Manual Manipulation Sliders */
+        /* Slider Components */
         .slider-group { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 12px; }
         .control-row { display: flex; flex-direction: column; gap: 4px; }
         .control-row label { font-size: 0.75rem; color: #aaa; display: flex; justify-content: space-between; }
@@ -51,7 +51,7 @@
     <div id="ui-sidebar">
         <h1><span></span> Flow Studio Pro</h1>
         
-        <div id="pipeline-loader">⚡ System initializing...</div>
+        <div id="pipeline-loader">📡 Initializing target grid...</div>
 
         <!-- Rig Diagnosis Sliders -->
         <div>
@@ -66,8 +66,8 @@
                     <input type="range" id="slider-shoulder-r" min="-90" max="135" value="0">
                 </div>
                 <div class="control-row">
-                    <label><span>Hip Spread (Legs Spread)</span><span id="val-23">0°</span></label>
-                    <input type="range" id="slider-hips" min="0" max="60" value="0">
+                    <label><span>Hip Spread (Legs Out)</span><span id="val-23">0°</span></label>
+                    <input type="range" id="slider-hips" min="-10" max="60" value="0">
                 </div>
             </div>
         </div>
@@ -108,7 +108,7 @@
         controls.dampingFactor = 0.05;
         controls.target.set(0, 1, 0);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
         const skyLight = new THREE.DirectionalLight(0xffffff, 1.2);
         skyLight.position.set(5, 10, 5);
         scene.add(skyLight);
@@ -122,17 +122,19 @@
         
         const gltfLoader = new THREE.GLTFLoader();
 
+        // Target updated to clean un-animated XBot model file
         const DEFAULT_MODEL_URL = "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/XBot.glb";
 
+        // Mixamo skeleton structure mapping definitions
         const defaultSkeletonMap = {
-            "11": "vanguard_LeftArm",      
-            "12": "vanguard_RightArm",     
-            "13": "vanguard_LeftForeArm",  
-            "14": "vanguard_RightForeArm", 
-            "23": "vanguard_LeftUpLeg",    
-            "24": "vanguard_RightUpLeg",   
-            "25": "vanguard_LeftLeg",      
-            "26": "vanguard_RightLeg"      
+            "11": "mixamorigLeftArm",      
+            "12": "mixamorigRightArm",     
+            "13": "mixamorigLeftForeArm",  
+            "14": "mixamorigRightForeArm", 
+            "23": "mixamorigLeftUpLeg",    
+            "24": "mixamorigRightUpLeg",   
+            "25": "mixamorigLeftLeg",      
+            "26": "mixamorigRightLeg"      
         };
 
         function loadStudioCharacter(url) {
@@ -142,37 +144,34 @@
                 if (activeMesh) scene.remove(activeMesh);
                 activeMesh = gltf.scene;
                 
-                // Normalizing scale metrics
+                // Scale normalization matrix calculations
                 const boundingBox = new THREE.Box3().setFromObject(activeMesh);
                 const dimensions = boundingBox.getSize(new THREE.Vector3());
                 const correctionRatio = 1.75 / dimensions.y;
                 activeMesh.scale.set(correctionRatio, correctionRatio, correctionRatio);
                 activeMesh.position.set(0, 0, 0);
 
-                // FORCE DEACTIVATION of any structural constraint components
+                // Traverse mesh to unlock local transforms explicitly 
                 activeMesh.traverse(node => {
                     if (node.isBone) {
-                        node.matrixAutoUpdate = true; // Tell Three.js to accept custom programmatic overrides
+                        node.matrixAutoUpdate = true;
                     }
                 });
 
                 scene.add(activeMesh);
                 
-                // Link bones up
+                // Link skeleton tracking nodes
                 Object.keys(defaultSkeletonMap).forEach(key => {
                     const boneName = defaultSkeletonMap[key];
                     const foundBone = activeMesh.getObjectByName(boneName);
                     if (foundBone) {
                         internalBoneObjects[key] = foundBone;
                         
-                        // Generate explicit anchor markers on screen
-                        const worldPosition = new THREE.Vector3();
-                        foundBone.getWorldPosition(worldPosition);
-                        
+                        // Generate tracking spheres for local reference diagnostics
                         const markerGeo = new THREE.SphereGeometry(0.02, 16, 16);
-                        const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64 });
+                        const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64, depthTest: false });
                         const sphereMesh = new THREE.Mesh(markerGeo, markerMat);
-                        sphereMesh.position.copy(worldPosition);
+                        sphereMesh.renderOrder = 999;
                         scene.add(sphereMesh);
                         visualMarkers[key] = sphereMesh;
 
@@ -189,17 +188,18 @@
         }
 
         function setupSliderListeners() {
-            // Left Shoulder Slider Hook
+            // Left Shoulder Slider Map
             document.getElementById('slider-shoulder-l').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-11').innerText = val + "°";
                 const radians = (val * Math.PI) / 180;
                 if (internalBoneObjects["11"]) {
-                    internalBoneObjects["11"].rotation.z = radians; // Directly manipulation test
+                    // Mixamo arms utilize local rotation profiles
+                    internalBoneObjects["11"].rotation.z = radians; 
                 }
             });
 
-            // Right Shoulder Slider Hook
+            // Right Shoulder Slider Map
             document.getElementById('slider-shoulder-r').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-12').innerText = val + "°";
@@ -209,13 +209,13 @@
                 }
             });
 
-            // Dual Hip Spread Slider Hook
+            // Hip Joint Spread Slider Map
             document.getElementById('slider-hips').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-23').innerText = val + "°";
                 const radians = (val * Math.PI) / 180;
-                if (internalBoneObjects["23"]) internalBoneObjects["23"].rotation.z = -radians;
-                if (internalBoneObjects["24"]) internalBoneObjects["24"].rotation.z = radians;
+                if (internalBoneObjects["23"]) internalBoneObjects["23"].rotation.z = radians;
+                if (internalBoneObjects["24"]) internalBoneObjects["24"].rotation.z = -radians;
             });
         }
 
@@ -227,10 +227,12 @@
             requestAnimationFrame(animate);
             controls.update();
 
-            // Track markers should strictly follow the bones real-time positions
+            // Project visual markers into real-time absolute matrix coordinates
             Object.keys(internalBoneObjects).forEach(key => {
                 if (visualMarkers[key] && internalBoneObjects[key]) {
-                    visualMarkers[key].position.setFromMatrixPosition(internalBoneObjects[key].matrixWorld);
+                    const worldPosition = new THREE.Vector3();
+                    internalBoneObjects[key].getWorldPosition(worldPosition);
+                    visualMarkers[key].position.copy(worldPosition);
                 }
             });
 
