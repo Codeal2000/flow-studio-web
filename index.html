@@ -10,7 +10,6 @@
         
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         
-        /* Interactive Side Panel */
         #ui-sidebar { 
             position: absolute; top: 20px; left: 20px; z-index: 10; 
             background: rgba(12, 12, 12, 0.8); width: 350px; max-height: calc(100vh - 40px);
@@ -25,7 +24,6 @@
         
         #pipeline-loader { background: rgba(0, 122, 255, 0.15); border: 1px solid #007aff; padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #fff; text-align: center; }
         
-        /* Slider Components */
         .slider-group { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 12px; }
         .control-row { display: flex; flex-direction: column; gap: 4px; }
         .control-row label { font-size: 0.75rem; color: #aaa; display: flex; justify-content: space-between; }
@@ -53,7 +51,6 @@
         
         <div id="pipeline-loader">📡 Initializing target grid...</div>
 
-        <!-- Rig Diagnosis Sliders -->
         <div>
             <div class="section-title">Manual Bone Manipulation Diagnostic</div>
             <div class="slider-group">
@@ -122,10 +119,9 @@
         
         const gltfLoader = new THREE.GLTFLoader();
 
-        // Target updated to clean un-animated XBot model file
-        const DEFAULT_MODEL_URL = "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/XBot.glb";
+        // FIXED: Swapped to a standard public glTF sample distribution server that permits unblocked CORS lookups
+        const DEFAULT_MODEL_URL = "https://gltf-viewer.donmccurdy.com/assets/models/XBot.glb";
 
-        // Mixamo skeleton structure mapping definitions
         const defaultSkeletonMap = {
             "11": "mixamorigLeftArm",      
             "12": "mixamorigRightArm",     
@@ -144,14 +140,12 @@
                 if (activeMesh) scene.remove(activeMesh);
                 activeMesh = gltf.scene;
                 
-                // Scale normalization matrix calculations
                 const boundingBox = new THREE.Box3().setFromObject(activeMesh);
                 const dimensions = boundingBox.getSize(new THREE.Vector3());
                 const correctionRatio = 1.75 / dimensions.y;
                 activeMesh.scale.set(correctionRatio, correctionRatio, correctionRatio);
                 activeMesh.position.set(0, 0, 0);
 
-                // Traverse mesh to unlock local transforms explicitly 
                 activeMesh.traverse(node => {
                     if (node.isBone) {
                         node.matrixAutoUpdate = true;
@@ -160,14 +154,15 @@
 
                 scene.add(activeMesh);
                 
-                // Link skeleton tracking nodes
                 Object.keys(defaultSkeletonMap).forEach(key => {
                     const boneName = defaultSkeletonMap[key];
                     const foundBone = activeMesh.getObjectByName(boneName);
                     if (foundBone) {
                         internalBoneObjects[key] = foundBone;
                         
-                        // Generate tracking spheres for local reference diagnostics
+                        const worldPosition = new THREE.Vector3();
+                        foundBone.getWorldPosition(worldPosition);
+                        
                         const markerGeo = new THREE.SphereGeometry(0.02, 16, 16);
                         const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64, depthTest: false });
                         const sphereMesh = new THREE.Mesh(markerGeo, markerMat);
@@ -184,22 +179,32 @@
                 document.getElementById('pipeline-loader').style.background = "rgba(0, 255, 100, 0.1)";
                 
                 setupSliderListeners();
+            }, 
+            // Monitoring download progression explicitly
+            function(xhr) {
+                if (xhr.total > 0) {
+                    const pct = Math.round((xhr.loaded / xhr.total) * 100);
+                    document.getElementById('pipeline-loader').innerText = `📡 Downloading Studio Mesh: ${pct}%`;
+                }
+            },
+            // Catching silent fetch errors on the ui panel instantly
+            function(err) {
+                document.getElementById('pipeline-loader').innerText = "❌ Pipeline Stream Blocked by Security Policies";
+                document.getElementById('pipeline-loader').style.background = "rgba(255, 0, 0, 0.15)";
+                console.error("Studio Loader Exception:", err);
             });
         }
 
         function setupSliderListeners() {
-            // Left Shoulder Slider Map
             document.getElementById('slider-shoulder-l').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-11').innerText = val + "°";
                 const radians = (val * Math.PI) / 180;
                 if (internalBoneObjects["11"]) {
-                    // Mixamo arms utilize local rotation profiles
                     internalBoneObjects["11"].rotation.z = radians; 
                 }
             });
 
-            // Right Shoulder Slider Map
             document.getElementById('slider-shoulder-r').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-12').innerText = val + "°";
@@ -209,7 +214,6 @@
                 }
             });
 
-            // Hip Joint Spread Slider Map
             document.getElementById('slider-hips').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-23').innerText = val + "°";
@@ -227,7 +231,6 @@
             requestAnimationFrame(animate);
             controls.update();
 
-            // Project visual markers into real-time absolute matrix coordinates
             Object.keys(internalBoneObjects).forEach(key => {
                 if (visualMarkers[key] && internalBoneObjects[key]) {
                     const worldPosition = new THREE.Vector3();
