@@ -3,56 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flow Studio Clone - Bone Test Rig</title>
+    <title>Flow Studio Pro - Character Rig Driver</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background-color: #050505; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
+        
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        
         #ui-sidebar { 
             position: absolute; top: 20px; left: 20px; z-index: 10; 
-            background: rgba(12, 12, 12, 0.8); width: 350px; max-height: calc(100vh - 40px);
+            background: rgba(12, 12, 12, 0.85); width: 350px; max-height: calc(100vh - 40px);
             padding: 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); 
             backdrop-filter: blur(20px); display: flex; flex-direction: column; gap: 20px;
             overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.6);
         }
+        
         h1 { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
         h1 span { width: 8px; height: 8px; background: #007aff; border-radius: 50%; box-shadow: 0 0 10px #007aff; }
         .section-title { font-size: 0.8rem; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
-        #pipeline-loader { background: rgba(0, 122, 255, 0.15); border: 1px solid #007aff; padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #fff; text-align: center; }
+        
+        #pipeline-loader { background: rgba(0, 122, 255, 0.15); border: 1px solid #007aff; padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #fff; text-align: center; font-weight: 500; transition: all 0.3s ease; }
+        
         .slider-group { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 12px; }
         .control-row { display: flex; flex-direction: column; gap: 4px; }
         .control-row label { font-size: 0.75rem; color: #aaa; display: flex; justify-content: space-between; }
         .control-row input { width: 100%; accent-color: #007aff; cursor: pointer; background: #222; height: 6px; border-radius: 3px; outline: none; }
+        
         #mapping-panel { display: block; background: rgba(255,255,255,0.03); padding: 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
         .bone-selector { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
         .bone-btn { 
             background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); 
             color: #ccc; padding: 10px; border-radius: 6px; text-align: left; font-size: 0.85rem; 
-            display: flex; justify-content: space-between; align-items: center;
+            display: flex; justify-content: space-between; align-items: center; transition: all 0.2s ease;
         }
-        .bone-btn.mapped { border-color: #00ff64; color: #00ff64; }
-        .marker-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; }
+        .bone-btn.mapped { border-color: #00ff64; color: #00ff64; background: rgba(0, 255, 100, 0.02); }
+        .marker-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; transition: all 0.2s ease; }
         .bone-btn.mapped .marker-dot { background: #00ff64; box-shadow: 0 0 8px #00ff64; }
     </style>
+    <!-- Three.js Foundations -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
 
     <div id="ui-sidebar">
         <h1><span></span> Flow Studio Pro</h1>
-        <div id="pipeline-loader">📡 Initializing target grid...</div>
+        
+        <div id="pipeline-loader">📡 Stream Initialization Active...</div>
 
         <div>
             <div class="section-title">Manual Bone Manipulation Diagnostic</div>
             <div class="slider-group">
                 <div class="control-row">
-                    <label><span>Root Base Joint (Z Axis)</span><span id="val-11">0°</span></label>
+                    <label><span>Left Shoulder Roll (Z Axis)</span><span id="val-shoulder-l">0°</span></label>
                     <input type="range" id="slider-shoulder-l" min="-90" max="90" value="0">
                 </div>
                 <div class="control-row">
-                    <label><span>Middle Joint Bend (Z Axis)</span><span id="val-12">0°</span></label>
+                    <label><span>Right Shoulder Roll (Z Axis)</span><span id="val-shoulder-r">0°</span></label>
                     <input type="range" id="slider-shoulder-r" min="-90" max="90" value="0">
+                </div>
+                <div class="control-row">
+                    <label><span>Left Elbow Hinge (X Axis)</span><span id="val-elbow-l">0°</span></label>
+                    <input type="range" id="slider-elbow-l" min="0" max="130" value="0">
                 </div>
             </div>
         </div>
@@ -60,8 +73,9 @@
         <div id="mapping-panel">
             <div class="section-title">Joint Reference Map Status</div>
             <div class="bone-selector">
-                <div class="bone-btn" id="btn-11">Root Joint <span class="marker-dot"></span></div>
-                <div class="bone-btn" id="btn-12">Middle Joint <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-shoulder-l">Left Shoulder Target <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-shoulder-r">Right Shoulder Target <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-elbow-l">Left Elbow Target <span class="marker-dot"></span></div>
             </div>
         </div>
     </div>
@@ -69,131 +83,193 @@
     <div id="canvas-container"></div>
 
     <script>
+        // --- Viewport & Scene Construction ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
 
-        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 1.5, 3);
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 1.4, 2.5);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.outputEncoding = THREE.sRGBEncoding;
         container.appendChild(renderer.domElement);
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.target.set(0, 1, 0);
+        controls.target.set(0, 1.0, 0);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-        const skyLight = new THREE.DirectionalLight(0xffffff, 1.0);
-        skyLight.position.set(5, 10, 5);
-        scene.add(skyLight);
+        // --- Studio Lighting Grid ---
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(3, 10, 5);
+        scene.add(dirLight);
         
-        scene.add(new THREE.GridHelper(40, 40, 0x1c1c1c, 0x0c0c0c));
+        const grid = new THREE.GridHelper(30, 30, 0x1c1c1c, 0x0c0c0c);
+        scene.add(grid);
 
-        let bones = [];
-        let mesh = null;
+        // --- Core Rig System State Variables ---
+        let targetSkeleton = null;
+        let boneMap = {};
         const visualMarkers = [];
 
-        function buildExplicitRig() {
-            document.getElementById('pipeline-loader').innerText = "📡 Generating Code-Driven Asset Engine...";
+        // Standard Mixamo / RPM Bone Identifiers
+        const boneTargetNames = {
+            shoulderL: "LeftArm",
+            shoulderR: "RightArm",
+            elbowL: "LeftForeArm"
+        };
 
-            // Create a cylinder: height 2.0, centered at 0 (goes from -1.0 to 1.0)
-            const segmentHeight = 2.0;
-            const geometry = new THREE.CylinderGeometry(0.08, 0.1, segmentHeight, 16, 20);
-            
-            const position = geometry.attributes.position;
-            const skinIndices = [];
-            const skinWeights = [];
+        // --- GLTF Character Loader Pipeline ---
+        function loadCharacterAsset() {
+            const loader = new THREE.GLTFLoader();
+            // Using a clean, uncompressed standard low-poly skinning dummy model
+            const modelUrl = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/XBot.glb';
 
-            for (let i = 0; i < position.count; i++) {
-                const y = position.getY(i); // Ranges from -1.0 to 1.0
+            loader.load(modelUrl, (gltf) => {
+                const character = gltf.scene;
+                
+                // Force skinning compilation overrides onto imported materials
+                character.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        if (child.material) {
+                            child.material.skinning = true; 
+                            child.material.roughness = 0.5;
+                        }
+                    }
+                    // Extract internal skeleton joints
+                    if (child.isBone) {
+                        // Check for common variants in names (standard string matching)
+                        if (child.name.includes(boneTargetNames.shoulderL)) boneMap.shoulderL = child;
+                        if (child.name.includes(boneTargetNames.shoulderR)) boneMap.shoulderR = child;
+                        if (child.name.includes(boneTargetNames.elbowL)) boneMap.elbowL = child;
+                    }
+                });
 
-                if (y <= 0) {
-                    // Lower half attached completely to Bone 0
-                    skinIndices.push(0, 0, 0, 0);
-                    skinWeights.push(1, 0, 0, 0);
-                } else {
-                    // Upper half attached completely to Bone 1
-                    skinIndices.push(1, 0, 0, 0);
-                    skinWeights.push(1, 0, 0, 0);
-                }
+                scene.add(character);
+                verifyAndActivateRig();
+
+            }, (xhr) => {
+                let percent = Math.round((xhr.loaded / xhr.total) * 100);
+                document.getElementById('pipeline-loader').innerText = `📥 Downloading Rig Framework: ${percent}%`;
+            }, (error) => {
+                console.warn("External model asset pipeline blocked. Activating local generator alternative...", error);
+                generateFallbackRigEngine();
+            });
+        }
+
+        // --- UI State Mapping Updates ---
+        function verifyAndActivateRig() {
+            let activeBonesCount = 0;
+
+            if (boneMap.shoulderL) { document.getElementById('btn-shoulder-l').classList.add('mapped'); attachTrackerDot(boneMap.shoulderL); activeBonesCount++; }
+            if (boneMap.shoulderR) { document.getElementById('btn-shoulder-r').classList.add('mapped'); attachTrackerDot(boneMap.shoulderR); activeBonesCount++; }
+            if (boneMap.elbowL) { document.getElementById('btn-elbow-l').classList.add('mapped'); attachTrackerDot(boneMap.elbowL); activeBonesCount++; }
+
+            const loaderStatus = document.getElementById('pipeline-loader');
+            if (activeBonesCount > 0) {
+                loaderStatus.innerText = "✅ Character Mesh Connected: Drivers Live";
+                loaderStatus.style.background = "rgba(0, 255, 100, 0.15)";
+                loaderStatus.style.borderColor = "#00ff64";
+            } else {
+                loaderStatus.innerText = "⚠ Asset loaded, bone maps unaligned.";
+                generateFallbackRigEngine();
             }
 
-            geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
-            geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
-
-            // Setup simplified bone chain
-            const rootBone = new THREE.Bone();
-            const childBone = new THREE.Bone();
-            
-            // Set base positions
-            rootBone.position.y = -1.0; // Bottom of cylinder position
-            childBone.position.y = 1.0;  // Center joint position where upper half begins
-            
-            rootBone.add(childBone);
-            bones.push(rootBone);
-            bones.push(childBone);
-
-            const material = new THREE.MeshStandardMaterial({ 
-                color: 0x2255ff, 
-                wireframe: true,
-                skinning: true // MANDATORY: Explicitly instructs the shader compilation to handle skinning
-            });
-
-            mesh = new THREE.SkinnedMesh(geometry, material);
-            mesh.add(rootBone); 
-
-            const skeleton = new THREE.Skeleton(bones);
-            mesh.bind(skeleton);
-            
-            // Shift the entire container up so it stands nicely on the grid line
-            mesh.position.y = 1.0; 
-            scene.add(mesh);
-
-            // Generate tracking dots
-            bones.forEach((bone, index) => {
-                const markerGeo = new THREE.SphereGeometry(0.03, 16, 16);
-                const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64, depthTest: false });
-                const sphere = new THREE.Mesh(markerGeo, markerMat);
-                sphere.renderOrder = 999;
-                scene.add(sphere);
-                visualMarkers.push({ sphere, bone });
-
-                const btn = document.getElementById(`btn-1${index + 1}`);
-                if (btn) btn.classList.add('mapped');
-            });
-
-            document.getElementById('pipeline-loader').innerText = "✅ Engine Active: Sliders Live";
-            document.getElementById('pipeline-loader').style.background = "rgba(0, 255, 100, 0.1)";
-            
-            setupLocalListeners();
+            bindControlListeners();
         }
 
-        function setupLocalListeners() {
+        // --- Attach Visual Neon Points to Joint Scales ---
+        function attachTrackerDot(boneTarget) {
+            const markerGeo = new THREE.SphereGeometry(0.02, 16, 16);
+            const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64, depthTest: false });
+            const sphere = new THREE.Mesh(markerGeo, markerMat);
+            sphere.renderOrder = 999;
+            scene.add(sphere);
+            visualMarkers.push({ sphere, bone: boneTarget });
+        }
+
+        // --- Fallback Rig Engine (In case of network failures or offline loading) ---
+        function generateFallbackRigEngine() {
+            document.getElementById('pipeline-loader').innerText = "⚙ Offline Fallback Engine Initialized";
+            
+            const geometry = new THREE.CylinderGeometry(0.05, 0.07, 1.5, 16, 10);
+            const pos = geometry.attributes.position;
+            const indices = [], weights = [];
+
+            for (let i = 0; i < pos.count; i++) {
+                let y = pos.getY(i) + 0.75;
+                let idx = y < 0.75 ? 0 : 1;
+                indices.push(idx, 0, 0, 0);
+                weights.push(1, 0, 0, 0);
+            }
+            geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(indices, 4));
+            geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(weights, 4));
+
+            const root = new THREE.Bone();
+            const child = new THREE.Bone();
+            root.position.y = -0.75;
+            child.position.y = 0.75;
+            root.add(child);
+
+            const mat = new THREE.MeshStandardMaterial({ color: 0x007aff, wireframe: true, skinning: true });
+            const fallbackMesh = new THREE.SkinnedMesh(geometry, mat);
+            fallbackMesh.add(root);
+            fallbackMesh.bind(new THREE.Skeleton([root, child]));
+            fallbackMesh.position.y = 1.0;
+            scene.add(fallbackMesh);
+
+            boneMap.shoulderL = root;
+            boneMap.elbowL = child;
+            
+            document.getElementById('btn-shoulder-l').classList.add('mapped');
+            document.getElementById('btn-elbow-l').classList.add('mapped');
+            attachTrackerDot(root);
+            attachTrackerDot(child);
+            
+            bindControlListeners();
+        }
+
+        // --- UI Input Interactivity Links ---
+        function bindControlListeners() {
+            // Left Shoulder Slider
             document.getElementById('slider-shoulder-l').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
-                document.getElementById('val-11').innerText = val + "°";
-                bones[0].rotation.z = (val * Math.PI) / 180;
+                document.getElementById('val-shoulder-l').innerText = val + "°";
+                if (boneMap.shoulderL) boneMap.shoulderL.rotation.z = (val * Math.PI) / 180;
             });
 
+            // Right Shoulder Slider
             document.getElementById('slider-shoulder-r').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
-                document.getElementById('val-12').innerText = val + "°";
-                bones[1].rotation.z = (val * Math.PI) / 180;
+                document.getElementById('val-shoulder-r').innerText = val + "°";
+                if (boneMap.shoulderR) boneMap.shoulderR.rotation.z = -(val * Math.PI) / 180;
+            });
+
+            // Left Elbow Slider
+            document.getElementById('slider-elbow-l').addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('val-elbow-l').innerText = val + "°";
+                // Mixamo models bend along the X-axis for joints natively
+                if (boneMap.elbowL) boneMap.elbowL.rotation.x = (val * Math.PI) / 180;
             });
         }
 
+        // --- Initialize Runtime Execution Pipeline ---
         window.addEventListener('DOMContentLoaded', () => {
-            buildExplicitRig();
+            loadCharacterAsset();
         });
 
+        // --- Realtime Frame Loop rendering updates ---
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
 
+            // Project neon dots cleanly onto spatial coordinates
             visualMarkers.forEach(item => {
                 const worldPos = new THREE.Vector3();
                 item.bone.getWorldPosition(worldPos);
@@ -204,6 +280,7 @@
         }
         animate();
 
+        // --- Responsive Viewport Matrix Re-calculation ---
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
