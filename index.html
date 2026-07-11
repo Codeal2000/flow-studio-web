@@ -22,7 +22,7 @@
         h1 span { width: 8px; height: 8px; background: #007aff; border-radius: 50%; box-shadow: 0 0 10px #007aff; }
         .section-title { font-size: 0.8rem; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
         
-        #pipeline-loader { background: rgba(0, 122, 255, 0.15); border: 1px solid #007aff; padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #fff; text-align: center; font-weight: 500; transition: all 0.3s ease; }
+        #pipeline-loader { background: rgba(0, 122, 255, 0.15); border: 1px solid #007aff; padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #fff; text-align: center; font-weight: 500; transition: all 0.3s ease; word-break: break-all; }
         
         .slider-group { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 12px; }
         .control-row { display: flex; flex-direction: column; gap: 4px; }
@@ -83,7 +83,6 @@
     <div id="canvas-container"></div>
 
     <script>
-        // --- Viewport & Scene Construction ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
@@ -102,7 +101,6 @@
         controls.dampingFactor = 0.05;
         controls.target.set(0, 1.0, 0);
 
-        // --- Studio Lighting Grid ---
         scene.add(new THREE.AmbientLight(0xffffff, 0.6));
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
         dirLight.position.set(3, 10, 5);
@@ -111,28 +109,24 @@
         const grid = new THREE.GridHelper(30, 30, 0x1c1c1c, 0x0c0c0c);
         scene.add(grid);
 
-        // --- Core Rig System State Variables ---
         let boneMap = {};
         const visualMarkers = [];
 
-        // Standard Mixamo / RPM Bone Identifiers
         const boneTargetNames = {
             shoulderL: "LeftArm",
             shoulderR: "RightArm",
             elbowL: "LeftForeArm"
         };
 
-        // --- GLTF Character Loader Pipeline ---
         function loadCharacterAsset() {
             const loader = new THREE.GLTFLoader();
             
-            // TARGET FIXED: Points directly to your local uploaded repository file to stop CORS blocks
+            // Tries to look relative to your index.html file path location
             const modelUrl = 'XBot.glb';
 
             loader.load(modelUrl, (gltf) => {
                 const character = gltf.scene;
                 
-                // Force skinning compilation overrides onto imported materials
                 character.traverse((child) => {
                     if (child.isMesh) {
                         child.castShadow = true;
@@ -141,10 +135,9 @@
                             child.material.roughness = 0.5;
                         }
                     }
-                    // Extract internal skeleton joints
                     if (child.isBone) {
                         if (child.name.includes(boneTargetNames.shoulderL)) boneMap.shoulderL = child;
-                        if (child.name.includes(boneTargetNames.shoulderR)) boneMap.shoulderR = child;
+                        if (child.name.includes(child.name.includes(boneTargetNames.shoulderR) || boneTargetNames.shoulderR)) boneMap.shoulderR = child;
                         if (child.name.includes(boneTargetNames.elbowL)) boneMap.elbowL = child;
                     }
                 });
@@ -156,12 +149,16 @@
                 let percent = Math.round((xhr.loaded / xhr.total) * 100);
                 document.getElementById('pipeline-loader').innerText = `📥 Downloading Rig Framework: ${percent}%`;
             }, (error) => {
-                console.warn("Local model asset framework failed to load. Running fallback...", error);
+                // UI Diagnostic: Shows exactly what went wrong with the path load
+                const statusBox = document.getElementById('pipeline-loader');
+                statusBox.innerText = `❌ Error: Can't find '${modelUrl}'. Running Fallback.`;
+                statusBox.style.background = "rgba(255, 0, 50, 0.15)";
+                statusBox.style.borderColor = "#ff0032";
+                
                 generateFallbackRigEngine();
             });
         }
 
-        // --- UI State Mapping Updates ---
         function verifyAndActivateRig() {
             let activeBonesCount = 0;
 
@@ -182,7 +179,6 @@
             bindControlListeners();
         }
 
-        // --- Attach Visual Neon Points to Joint Scales ---
         function attachTrackerDot(boneTarget) {
             const markerGeo = new THREE.SphereGeometry(0.02, 16, 16);
             const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64, depthTest: false });
@@ -192,10 +188,7 @@
             visualMarkers.push({ sphere, bone: boneTarget });
         }
 
-        // --- Fallback Rig Engine ---
         function generateFallbackRigEngine() {
-            document.getElementById('pipeline-loader').innerText = "⚙ Offline Fallback Engine Initialized";
-            
             const geometry = new THREE.CylinderGeometry(0.05, 0.07, 1.5, 16, 10);
             const pos = geometry.attributes.position;
             const indices = [], weights = [];
@@ -233,23 +226,19 @@
             bindControlListeners();
         }
 
-        // --- UI Input Interactivity Links ---
         function bindControlListeners() {
-            // Left Shoulder Slider
             document.getElementById('slider-shoulder-l').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-shoulder-l').innerText = val + "°";
                 if (boneMap.shoulderL) boneMap.shoulderL.rotation.z = (val * Math.PI) / 180;
             });
 
-            // Right Shoulder Slider
             document.getElementById('slider-shoulder-r').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-shoulder-r').innerText = val + "°";
                 if (boneMap.shoulderR) boneMap.shoulderR.rotation.z = -(val * Math.PI) / 180;
             });
 
-            // Left Elbow Slider
             document.getElementById('slider-elbow-l').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-elbow-l').innerText = val + "°";
@@ -257,12 +246,10 @@
             });
         }
 
-        // --- Initialize Runtime Execution Pipeline ---
         window.addEventListener('DOMContentLoaded', () => {
             loadCharacterAsset();
         });
 
-        // --- Realtime Frame Loop ---
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
@@ -277,7 +264,6 @@
         }
         animate();
 
-        // --- Viewport Resize Handler ---
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
