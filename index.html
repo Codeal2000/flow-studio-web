@@ -121,8 +121,8 @@
         function loadCharacterAsset() {
             const loader = new THREE.GLTFLoader();
             
-            // Tries to look relative to your index.html file path location
-            const modelUrl = 'XBot.glb';
+            // FIXED: Set to match your exact file case name 'Xbot.glb'
+            const modelUrl = 'Xbot.glb';
 
             loader.load(modelUrl, (gltf) => {
                 const character = gltf.scene;
@@ -137,7 +137,7 @@
                     }
                     if (child.isBone) {
                         if (child.name.includes(boneTargetNames.shoulderL)) boneMap.shoulderL = child;
-                        if (child.name.includes(child.name.includes(boneTargetNames.shoulderR) || boneTargetNames.shoulderR)) boneMap.shoulderR = child;
+                        if (child.name.includes(boneTargetNames.shoulderR)) boneMap.shoulderR = child;
                         if (child.name.includes(boneTargetNames.elbowL)) boneMap.elbowL = child;
                     }
                 });
@@ -149,7 +149,6 @@
                 let percent = Math.round((xhr.loaded / xhr.total) * 100);
                 document.getElementById('pipeline-loader').innerText = `📥 Downloading Rig Framework: ${percent}%`;
             }, (error) => {
-                // UI Diagnostic: Shows exactly what went wrong with the path load
                 const statusBox = document.getElementById('pipeline-loader');
                 statusBox.innerText = `❌ Error: Can't find '${modelUrl}'. Running Fallback.`;
                 statusBox.style.background = "rgba(255, 0, 50, 0.15)";
