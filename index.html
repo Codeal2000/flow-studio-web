@@ -7,9 +7,7 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background-color: #050505; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
-        
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
-        
         #ui-sidebar { 
             position: absolute; top: 20px; left: 20px; z-index: 10; 
             background: rgba(12, 12, 12, 0.8); width: 350px; max-height: calc(100vh - 40px);
@@ -17,18 +15,14 @@
             backdrop-filter: blur(20px); display: flex; flex-direction: column; gap: 20px;
             overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.6);
         }
-        
         h1 { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
         h1 span { width: 8px; height: 8px; background: #007aff; border-radius: 50%; box-shadow: 0 0 10px #007aff; }
         .section-title { font-size: 0.8rem; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
-        
         #pipeline-loader { background: rgba(0, 122, 255, 0.15); border: 1px solid #007aff; padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #fff; text-align: center; }
-        
         .slider-group { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 12px; }
         .control-row { display: flex; flex-direction: column; gap: 4px; }
         .control-row label { font-size: 0.75rem; color: #aaa; display: flex; justify-content: space-between; }
         .control-row input { width: 100%; accent-color: #007aff; cursor: pointer; background: #222; height: 6px; border-radius: 3px; outline: none; }
-        
         #mapping-panel { display: block; background: rgba(255,255,255,0.03); padding: 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
         .bone-selector { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
         .bone-btn { 
@@ -47,23 +41,18 @@
 
     <div id="ui-sidebar">
         <h1><span></span> Flow Studio Pro</h1>
-        
         <div id="pipeline-loader">📡 Initializing target grid...</div>
 
         <div>
             <div class="section-title">Manual Bone Manipulation Diagnostic</div>
             <div class="slider-group">
                 <div class="control-row">
-                    <label><span>Left Shoulder Roll (Z Axis)</span><span id="val-11">0°</span></label>
+                    <label><span>Root Base Joint (Z Axis)</span><span id="val-11">0°</span></label>
                     <input type="range" id="slider-shoulder-l" min="-90" max="90" value="0">
                 </div>
                 <div class="control-row">
-                    <label><span>Right Shoulder Roll (Z Axis)</span><span id="val-12">0°</span></label>
+                    <label><span>Middle Joint Bend (Z Axis)</span><span id="val-12">0°</span></label>
                     <input type="range" id="slider-shoulder-r" min="-90" max="90" value="0">
-                </div>
-                <div class="control-row">
-                    <label><span>Elbow Hinge (X Axis)</span><span id="val-23">0°</span></label>
-                    <input type="range" id="slider-elbow" min="0" max="120" value="0">
                 </div>
             </div>
         </div>
@@ -71,9 +60,8 @@
         <div id="mapping-panel">
             <div class="section-title">Joint Reference Map Status</div>
             <div class="bone-selector">
-                <div class="bone-btn" id="btn-11">Left Shoulder Joint <span class="marker-dot"></span></div>
-                <div class="bone-btn" id="btn-12">Right Shoulder Joint <span class="marker-dot"></span></div>
-                <div class="bone-btn" id="btn-13">Mechanical Elbow Joint <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-11">Root Joint <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-12">Middle Joint <span class="marker-dot"></span></div>
             </div>
         </div>
     </div>
@@ -98,128 +86,114 @@
         controls.dampingFactor = 0.05;
         controls.target.set(0, 1, 0);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-        const skyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const skyLight = new THREE.DirectionalLight(0xffffff, 1.0);
         skyLight.position.set(5, 10, 5);
         scene.add(skyLight);
         
-        const grid = new THREE.GridHelper(40, 40, 0x1c1c1c, 0x0c0c0c);
-        scene.add(grid);
+        scene.add(new THREE.GridHelper(40, 40, 0x1c1c1c, 0x0c0c0c));
 
-        // Core SkinnedMesh references
         let bones = [];
         let mesh = null;
         const visualMarkers = [];
 
-        function buildLocalProceduralRig() {
+        function buildExplicitRig() {
             document.getElementById('pipeline-loader').innerText = "📡 Generating Code-Driven Asset Engine...";
 
-            const segmentHeight = 0.4;
-            const segmentCount = 3;
-            const height = segmentHeight * segmentCount;
-            const halfHeight = height * 0.5;
-
-            const sizing = { segmentHeight, segmentCount, height, halfHeight };
+            // Create a cylinder: height 2.0, centered at 0 (goes from -1.0 to 1.0)
+            const segmentHeight = 2.0;
+            const geometry = new THREE.CylinderGeometry(0.08, 0.1, segmentHeight, 16, 20);
             
-            // Build cylindrical mesh structure geometry 
-            const geometry = new THREE.CylinderGeometry(0.06, 0.08, height, 16, segmentCount * 4);
             const position = geometry.attributes.position;
-            
-            const vertexIndices = [];
-            const vertexWeights = [];
+            const skinIndices = [];
+            const skinWeights = [];
 
             for (let i = 0; i < position.count; i++) {
-                const y = position.getY(i) + halfHeight;
-                const index = Math.floor(y / segmentHeight);
-                const weight = (y % segmentHeight) / segmentHeight;
+                const y = position.getY(i); // Ranges from -1.0 to 1.0
 
-                vertexIndices.push(index, index + 1, 0, 0);
-                vertexWeights.push(1 - weight, weight, 0, 0);
+                if (y <= 0) {
+                    // Lower half attached completely to Bone 0
+                    skinIndices.push(0, 0, 0, 0);
+                    skinWeights.push(1, 0, 0, 0);
+                } else {
+                    // Upper half attached completely to Bone 1
+                    skinIndices.push(1, 0, 0, 0);
+                    skinWeights.push(1, 0, 0, 0);
+                }
             }
 
-            geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(vertexIndices, 4));
-            geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(vertexWeights, 4));
+            geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
+            geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
 
-            // Create bone hierarchies natively
+            // Setup simplified bone chain
             const rootBone = new THREE.Bone();
-            rootBone.position.y = 0.5; // Lift up from floor grid
+            const childBone = new THREE.Bone();
+            
+            // Set base positions
+            rootBone.position.y = -1.0; // Bottom of cylinder position
+            childBone.position.y = 1.0;  // Center joint position where upper half begins
+            
+            rootBone.add(childBone);
             bones.push(rootBone);
+            bones.push(childBone);
 
-            let parentBone = rootBone;
-            for (let i = 0; i < sizing.segmentCount; i++) {
-                const bone = new THREE.Bone();
-                bone.position.y = sizing.segmentHeight;
-                parentBone.add(bone);
-                bones.push(bone);
-                parentBone = bone;
-            }
-
-            // Bind skeleton structure matrices
-            const skeleton = new THREE.Skeleton(bones);
             const material = new THREE.MeshStandardMaterial({ 
                 color: 0x2255ff, 
                 wireframe: true,
-                roughness: 0.4 
+                skinning: true // MANDATORY: Explicitly instructs the shader compilation to handle skinning
             });
 
             mesh = new THREE.SkinnedMesh(geometry, material);
-            mesh.add(bones[0]);
+            mesh.add(rootBone); 
+
+            const skeleton = new THREE.Skeleton(bones);
             mesh.bind(skeleton);
+            
+            // Shift the entire container up so it stands nicely on the grid line
+            mesh.position.y = 1.0; 
             scene.add(mesh);
 
-            // Append geometric debugging tracker dots to each joint vertex position
+            // Generate tracking dots
             bones.forEach((bone, index) => {
-                if (index < 3) {
-                    const markerGeo = new THREE.SphereGeometry(0.025, 16, 16);
-                    const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64, depthTest: false });
-                    const sphere = new THREE.Mesh(markerGeo, markerMat);
-                    sphere.renderOrder = 999;
-                    scene.add(sphere);
-                    visualMarkers.push({ sphere, bone });
+                const markerGeo = new THREE.SphereGeometry(0.03, 16, 16);
+                const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64, depthTest: false });
+                const sphere = new THREE.Mesh(markerGeo, markerMat);
+                sphere.renderOrder = 999;
+                scene.add(sphere);
+                visualMarkers.push({ sphere, bone });
 
-                    const btn = document.getElementById(`btn-1${index + 1}`);
-                    if (btn) btn.classList.add('mapped');
-                }
+                const btn = document.getElementById(`btn-1${index + 1}`);
+                if (btn) btn.classList.add('mapped');
             });
 
-            document.getElementById('pipeline-loader').innerText = "✅ Direct Offline Engine Active: Sliders Live";
+            document.getElementById('pipeline-loader').innerText = "✅ Engine Active: Sliders Live";
             document.getElementById('pipeline-loader').style.background = "rgba(0, 255, 100, 0.1)";
             
             setupLocalListeners();
         }
 
         function setupLocalListeners() {
-            // Base Joint (Left Shoulder Stand-in)
             document.getElementById('slider-shoulder-l').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-11').innerText = val + "°";
                 bones[0].rotation.z = (val * Math.PI) / 180;
             });
 
-            // Mid Joint (Right Shoulder Stand-in)
             document.getElementById('slider-shoulder-r').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-12').innerText = val + "°";
                 bones[1].rotation.z = (val * Math.PI) / 180;
             });
-
-            // Upper Hinge (Elbow Joint Stand-in)
-            document.getElementById('slider-elbow').addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                document.getElementById('val-23').innerText = val + "°";
-                bones[2].rotation.x = (val * Math.PI) / 180;
-            });
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            buildLocalProceduralRig();
+            buildExplicitRig();
         });
 
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
 
-            // Track live bone coordinates to attach neon marker overlays
             visualMarkers.forEach(item => {
                 const worldPos = new THREE.Vector3();
                 item.bone.getWorldPosition(worldPos);
