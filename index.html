@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flow Studio Pro - Character Rig Driver</title>
+    <title>Flow Studio Pro - Advanced Rig Driver</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background-color: #050505; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
@@ -12,37 +12,40 @@
         
         #ui-sidebar { 
             position: absolute; top: 20px; left: 20px; z-index: 10; 
-            background: rgba(12, 12, 12, 0.85); width: 350px; max-height: calc(100vh - 40px);
+            background: rgba(12, 12, 12, 0.85); width: 360px; max-height: calc(100vh - 40px);
             padding: 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); 
-            backdrop-filter: blur(20px); display: flex; flex-direction: column; gap: 20px;
+            backdrop-filter: blur(20px); display: flex; flex-direction: column; gap: 18px;
             overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.6);
         }
         
         h1 { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
         h1 span { width: 8px; height: 8px; background: #007aff; border-radius: 50%; box-shadow: 0 0 10px #007aff; }
-        .section-title { font-size: 0.8rem; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .section-title { font-size: 0.75rem; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
         
-        #pipeline-loader { background: rgba(0, 122, 255, 0.15); border: 1px solid #007aff; padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #fff; text-align: center; font-weight: 500; transition: all 0.3s ease; word-break: break-all; }
+        #pipeline-loader { background: rgba(0, 122, 255, 0.15); border: 1px solid #007aff; padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #fff; text-align: center; font-weight: 500; transition: all 0.3s ease; }
         
-        .slider-group { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 12px; }
+        .instruction-note { font-size: 0.75rem; color: #00ff64; background: rgba(0, 255, 100, 0.08); border: 1px solid rgba(0, 255, 100, 0.2); padding: 8px; border-radius: 6px; text-align: center; }
+
+        .slider-group { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); padding: 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; }
         .control-row { display: flex; flex-direction: column; gap: 4px; }
-        .control-row label { font-size: 0.75rem; color: #aaa; display: flex; justify-content: space-between; }
-        .control-row input { width: 100%; accent-color: #007aff; cursor: pointer; background: #222; height: 6px; border-radius: 3px; outline: none; }
+        .control-row label { font-size: 0.72rem; color: #aaa; display: flex; justify-content: space-between; }
+        .control-row input { width: 100%; accent-color: #007aff; cursor: pointer; background: #222; height: 4px; border-radius: 2px; outline: none; }
         
-        #mapping-panel { display: block; background: rgba(255,255,255,0.03); padding: 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
-        .bone-selector { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+        #mapping-panel { background: rgba(255,255,255,0.02); padding: 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.04); }
+        .bone-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
         .bone-btn { 
-            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); 
-            color: #ccc; padding: 10px; border-radius: 6px; text-align: left; font-size: 0.85rem; 
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); 
+            color: #888; padding: 8px; border-radius: 6px; text-align: left; font-size: 0.75rem; 
             display: flex; justify-content: space-between; align-items: center; transition: all 0.2s ease;
         }
-        .bone-btn.mapped { border-color: #00ff64; color: #00ff64; background: rgba(0, 255, 100, 0.02); }
-        .marker-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; transition: all 0.2s ease; }
-        .bone-btn.mapped .marker-dot { background: #00ff64; box-shadow: 0 0 8px #00ff64; }
+        .bone-btn.mapped { border-color: #00ff64; color: #fff; background: rgba(0, 255, 100, 0.02); }
+        .marker-dot { width: 6px; height: 6px; border-radius: 50%; background: #444; }
+        .bone-btn.mapped .marker-dot { background: #00ff64; box-shadow: 0 0 6px #00ff64; }
     </style>
-    <!-- Three.js Foundations -->
+    <!-- Three.js Dependencies & TransformControls Gizmo Extension -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
@@ -51,31 +54,40 @@
         <h1><span></span> Flow Studio Pro</h1>
         
         <div id="pipeline-loader">📡 Stream Initialization Active...</div>
+        
+        <div class="instruction-note">💡 Click any green node in the viewport to attach the 3D Rotation Gizmo!</div>
 
         <div>
-            <div class="section-title">Manual Bone Manipulation Diagnostic</div>
+            <div class="section-title">Manual Manipulation Controls</div>
             <div class="slider-group">
-                <div class="control-row">
-                    <label><span>Left Shoulder Roll (Z Axis)</span><span id="val-shoulder-l">0°</span></label>
-                    <input type="range" id="slider-shoulder-l" min="-90" max="90" value="0">
-                </div>
-                <div class="control-row">
-                    <label><span>Right Shoulder Roll (Z Axis)</span><span id="val-shoulder-r">0°</span></label>
-                    <input type="range" id="slider-shoulder-r" min="-90" max="90" value="0">
-                </div>
-                <div class="control-row">
-                    <label><span>Left Elbow Hinge (X Axis)</span><span id="val-elbow-l">0°</span></label>
-                    <input type="range" id="slider-elbow-l" min="0" max="130" value="0">
-                </div>
+                <!-- Upper Body -->
+                <div class="control-row"><label><span>Head (X Axis)</span><span id="val-head">0°</span></label><input type="range" id="slider-head" min="-45" max="45" value="0"></div>
+                <div class="control-row"><label><span>Spine (X Axis)</span><span id="val-spine">0°</span></label><input type="range" id="slider-spine" min="-30" max="45" value="0"></div>
+                <div class="control-row"><label><span>Left Shoulder Roll</span><span id="val-shoulder-l">0°</span></label><input type="range" id="slider-shoulder-l" min="-90" max="90" value="0"></div>
+                <div class="control-row"><label><span>Right Shoulder Roll</span><span id="val-shoulder-r">0°</span></label><input type="range" id="slider-shoulder-r" min="-90" max="90" value="0"></div>
+                <div class="control-row"><label><span>Left Elbow Hinge</span><span id="val-elbow-l">0°</span></label><input type="range" id="slider-elbow-l" min="0" max="130" value="0"></div>
+                <div class="control-row"><label><span>Right Elbow Hinge</span><span id="val-elbow-r">0°</span></label><input type="range" id="slider-elbow-r" min="0" max="130" value="0"></div>
+                <!-- Lower Body -->
+                <div class="control-row"><label><span>Left Hip Roll</span><span id="val-hip-l">0°</span></label><input type="range" id="slider-hip-l" min="-30" max="90" value="0"></div>
+                <div class="control-row"><label><span>Right Hip Roll</span><span id="val-hip-r">0°</span></label><input type="range" id="slider-hip-r" min="-30" max="90" value="0"></div>
+                <div class="control-row"><label><span>Left Knee Hinge</span><span id="val-knee-l">0°</span></label><input type="range" id="slider-knee-l" min="-130" max="0" value="0"></div>
+                <div class="control-row"><label><span>Right Knee Hinge</span><span id="val-knee-r">0°</span></label><input type="range" id="slider-knee-r" min="-130" max="0" value="0"></div>
             </div>
         </div>
 
         <div id="mapping-panel">
-            <div class="section-title">Joint Reference Map Status</div>
-            <div class="bone-selector">
-                <div class="bone-btn" id="btn-shoulder-l">Left Shoulder Target <span class="marker-dot"></span></div>
-                <div class="bone-btn" id="btn-shoulder-r">Right Shoulder Target <span class="marker-dot"></span></div>
-                <div class="bone-btn" id="btn-elbow-l">Left Elbow Target <span class="marker-dot"></span></div>
+            <div class="section-title">Skeleton Map Matrix</div>
+            <div class="bone-grid">
+                <div class="bone-btn" id="btn-head">Head <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-spine">Spine <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-shoulder-l">L Shoulder <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-shoulder-r">R Shoulder <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-elbow-l">L Elbow <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-elbow-r">R Elbow <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-hip-l">L Hip <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-hip-r">R Hip <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-knee-l">L Knee <span class="marker-dot"></span></div>
+                <div class="bone-btn" id="btn-knee-r">R Knee <span class="marker-dot"></span></div>
             </div>
         </div>
     </div>
@@ -101,6 +113,26 @@
         controls.dampingFactor = 0.05;
         controls.target.set(0, 1.0, 0);
 
+        // --- Interactive 3D Gizmo Initialization ---
+        const transformGizmo = new THREE.TransformControls(camera, renderer.domElement);
+        transformGizmo.setMode('rotate');
+        transformGizmo.setSize(0.6);
+        
+        // Pause camera controls while manipulating bones to prevent perspective shifting
+        transformGizmo.addEventListener('driving-changed', (event) => {
+            controls.enabled = !event.value;
+        });
+        transformGizmo.addEventListener('change', () => {
+            if (transformGizmo.object && transformGizmo.object.userData.linkedBone) {
+                updateSlidersFromGizmo(transformGizmo.object.userData.linkedBone);
+            }
+        });
+        scene.add(transformGizmo);
+
+        // Raycasting for Node selection clicks
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
         scene.add(new THREE.AmbientLight(0xffffff, 0.6));
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
         dirLight.position.set(3, 10, 5);
@@ -111,17 +143,24 @@
 
         let boneMap = {};
         const visualMarkers = [];
+        const clickableTargets = [];
 
+        // Full Comprehensive Mixamo Rig Hierarchy Targets
         const boneTargetNames = {
+            head: "Head",
+            spine: "Spine1",
             shoulderL: "LeftArm",
             shoulderR: "RightArm",
-            elbowL: "LeftForeArm"
+            elbowL: "LeftForeArm",
+            elbowR: "RightForeArm",
+            hipL: "LeftUpLeg",
+            hipR: "RightUpLeg",
+            kneeL: "LeftLeg",
+            kneeyR: "RightLeg"
         };
 
         function loadCharacterAsset() {
             const loader = new THREE.GLTFLoader();
-            
-            // FIXED: Set to match your exact file case name 'Xbot.glb'
             const modelUrl = 'Xbot.glb';
 
             loader.load(modelUrl, (gltf) => {
@@ -136,9 +175,16 @@
                         }
                     }
                     if (child.isBone) {
-                        if (child.name.includes(boneTargetNames.shoulderL)) boneMap.shoulderL = child;
-                        if (child.name.includes(boneTargetNames.shoulderR)) boneMap.shoulderR = child;
-                        if (child.name.includes(boneTargetNames.elbowL)) boneMap.elbowL = child;
+                        if (child.name.endsWith(boneTargetNames.head)) boneMap.head = child;
+                        if (child.name.endsWith(boneTargetNames.spine)) boneMap.spine = child;
+                        if (child.name.endsWith(boneTargetNames.shoulderL)) boneMap.shoulderL = child;
+                        if (child.name.endsWith(boneTargetNames.shoulderR)) boneMap.shoulderR = child;
+                        if (child.name.endsWith(boneTargetNames.elbowL)) boneMap.elbowL = child;
+                        if (child.name.endsWith(boneTargetNames.elbowR)) boneMap.elbowR = child;
+                        if (child.name.endsWith(boneTargetNames.hipL)) boneMap.hipL = child;
+                        if (child.name.endsWith(boneTargetNames.hipR)) boneMap.hipR = child;
+                        if (child.name.endsWith(boneTargetNames.kneeL)) boneMap.kneeL = child;
+                        if (child.name.endsWith(boneTargetNames.kneeyR)) boneMap.kneeR = child;
                     }
                 });
 
@@ -149,11 +195,7 @@
                 let percent = Math.round((xhr.loaded / xhr.total) * 100);
                 document.getElementById('pipeline-loader').innerText = `📥 Downloading Rig Framework: ${percent}%`;
             }, (error) => {
-                const statusBox = document.getElementById('pipeline-loader');
-                statusBox.innerText = `❌ Error: Can't find '${modelUrl}'. Running Fallback.`;
-                statusBox.style.background = "rgba(255, 0, 50, 0.15)";
-                statusBox.style.borderColor = "#ff0032";
-                
+                document.getElementById('pipeline-loader').innerText = `❌ Asset Load Error. Running Core Fallback.`;
                 generateFallbackRigEngine();
             });
         }
@@ -161,33 +203,93 @@
         function verifyAndActivateRig() {
             let activeBonesCount = 0;
 
-            if (boneMap.shoulderL) { document.getElementById('btn-shoulder-l').classList.add('mapped'); attachTrackerDot(boneMap.shoulderL); activeBonesCount++; }
-            if (boneMap.shoulderR) { document.getElementById('btn-shoulder-r').classList.add('mapped'); attachTrackerDot(boneMap.shoulderR); activeBonesCount++; }
-            if (boneMap.elbowL) { document.getElementById('btn-elbow-l').classList.add('mapped'); attachTrackerDot(boneMap.elbowL); activeBonesCount++; }
+            Object.keys(boneTargetNames).forEach(key => {
+                // Adjust name map matching for knee element variant name safely
+                let mappedKey = key === 'kneeyR' ? 'kneeR' : key;
+                if (boneMap[mappedKey]) {
+                    const btnId = 'btn-' + mappedKey.replace(/([A-Z])/g, "-$1").toLowerCase();
+                    const element = document.getElementById(btnId);
+                    if (element) element.classList.add('mapped');
+                    
+                    attachTrackerDot(boneMap[mappedKey], mappedKey);
+                    activeBonesCount++;
+                }
+            });
 
             const loaderStatus = document.getElementById('pipeline-loader');
             if (activeBonesCount > 0) {
-                loaderStatus.innerText = "✅ Character Mesh Connected: Drivers Live";
+                loaderStatus.innerText = "✅ Advanced Mesh Active: Gizmos Ready";
                 loaderStatus.style.background = "rgba(0, 255, 100, 0.15)";
                 loaderStatus.style.borderColor = "#00ff64";
             } else {
-                loaderStatus.innerText = "⚠ Asset loaded, bone maps unaligned.";
                 generateFallbackRigEngine();
             }
 
             bindControlListeners();
         }
 
-        function attachTrackerDot(boneTarget) {
-            const markerGeo = new THREE.SphereGeometry(0.02, 16, 16);
+        function attachTrackerDot(boneTarget, boneKey) {
+            const markerGeo = new THREE.SphereGeometry(0.03, 16, 16);
             const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ff64, depthTest: false });
             const sphere = new THREE.Mesh(markerGeo, markerMat);
             sphere.renderOrder = 999;
+            
+            // Link custom identifiers onto the interactable nodes
+            sphere.userData = { isNode: true, boneKey: boneKey, linkedBone: boneTarget };
+            
             scene.add(sphere);
             visualMarkers.push({ sphere, bone: boneTarget });
+            clickableTargets.push(sphere);
+        }
+
+        // --- Click Selection System ---
+        window.addEventListener('click', (event) => {
+            // Calculate screen cursor bounds
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(clickableTargets);
+
+            if (intersects.length > 0) {
+                const targetNode = intersects[0].object;
+                // Snap our transformation handles directly onto the underlying bone object
+                transformGizmo.attach(targetNode.userData.linkedBone);
+                transformGizmo.object.userData.linkedBone = targetNode.userData.boneKey;
+            } else {
+                // If clicking empty space and not actively moving the handles, detach
+                if (transformGizmo.dragging === false && !event.target.closest('#ui-sidebar')) {
+                    transformGizmo.detach();
+                }
+            }
+        });
+
+        // --- Sync Slider Readouts From Gizmo rotations ---
+        function updateSlidersFromGizmo(boneKey) {
+            const bone = boneMap[boneKey];
+            if (!bone) return;
+
+            let val = 0;
+            let sliderId = 'slider-' + boneKey.replace(/([A-Z])/g, "-$1").toLowerCase();
+            let valId = 'val-' + boneKey.replace(/([A-Z])/g, "-$1").toLowerCase();
+            
+            if (boneKey.includes('shoulder') || boneKey.includes('hip')) {
+                val = Math.round((bone.rotation.z * 180) / Math.PI);
+                if (boneKey === 'shoulderR') val = -val;
+            } else if (boneKey.includes('elbow') || boneKey.includes('knee') || boneKey === 'head' || boneKey === 'spine') {
+                val = Math.round((bone.rotation.x * 180) / Math.PI);
+            }
+
+            const slider = document.getElementById(sliderId);
+            const display = document.getElementById(valId);
+            if (slider && display) {
+                slider.value = val;
+                display.innerText = val + "°";
+            }
         }
 
         function generateFallbackRigEngine() {
+            document.getElementById('pipeline-loader').innerText = "⚙ Offline Fallback Engine Initialized";
             const geometry = new THREE.CylinderGeometry(0.05, 0.07, 1.5, 16, 10);
             const pos = geometry.attributes.position;
             const indices = [], weights = [];
@@ -219,30 +321,38 @@
             
             document.getElementById('btn-shoulder-l').classList.add('mapped');
             document.getElementById('btn-elbow-l').classList.add('mapped');
-            attachTrackerDot(root);
-            attachTrackerDot(child);
+            attachTrackerDot(root, 'shoulderL');
+            attachTrackerDot(child, 'elbowL');
             
             bindControlListeners();
         }
 
         function bindControlListeners() {
-            document.getElementById('slider-shoulder-l').addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                document.getElementById('val-shoulder-l').innerText = val + "°";
-                if (boneMap.shoulderL) boneMap.shoulderL.rotation.z = (val * Math.PI) / 180;
-            });
+            const setupSlider = (id, boneKey, axis, inverted = false) => {
+                const slider = document.getElementById('slider-' + id);
+                const display = document.getElementById('val-' + id);
+                if (!slider) return;
+                
+                slider.addEventListener('input', (e) => {
+                    const val = parseFloat(e.target.value);
+                    display.innerText = val + "°";
+                    if (boneMap[boneKey]) {
+                        let rad = (val * Math.PI) / 180;
+                        boneMap[boneKey].rotation[axis] = inverted ? -rad : rad;
+                    }
+                });
+            };
 
-            document.getElementById('slider-shoulder-r').addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                document.getElementById('val-shoulder-r').innerText = val + "°";
-                if (boneMap.shoulderR) boneMap.shoulderR.rotation.z = -(val * Math.PI) / 180;
-            });
-
-            document.getElementById('slider-elbow-l').addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                document.getElementById('val-elbow-l').innerText = val + "°";
-                if (boneMap.elbowL) boneMap.elbowL.rotation.x = (val * Math.PI) / 180;
-            });
+            setupSlider('head', 'head', 'x');
+            setupSlider('spine', 'spine', 'x');
+            setupSlider('shoulder-l', 'shoulderL', 'z');
+            setupSlider('shoulder-r', 'shoulderR', 'z', true);
+            setupSlider('elbow-l', 'elbowL', 'x');
+            setupSlider('elbow-r', 'elbowR', 'x');
+            setupSlider('hip-l', 'hipL', 'z');
+            setupSlider('hip-r', 'hipR', 'z');
+            setupSlider('knee-l', 'kneeL', 'x');
+            setupSlider('knee-r', 'kneeR', 'x');
         }
 
         window.addEventListener('DOMContentLoaded', () => {
