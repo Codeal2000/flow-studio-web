@@ -118,18 +118,18 @@
         transformGizmo.setMode('rotate');
         transformGizmo.setSize(0.6);
         
-        // Pause camera controls while manipulating bones to prevent perspective shifting
-        transformGizmo.addEventListener('driving-changed', (event) => {
+        // FIXED: Changed listener from 'driving-changed' to 'dragging-changed' to properly lock camera controls
+        transformGizmo.addEventListener('dragging-changed', (event) => {
             controls.enabled = !event.value;
         });
+        
         transformGizmo.addEventListener('change', () => {
-            if (transformGizmo.object && transformGizmo.object.userData.linkedBone) {
-                updateSlidersFromGizmo(transformGizmo.object.userData.linkedBone);
+            if (transformGizmo.object && transformGizmo.object.userData.linkedBoneKey) {
+                updateSlidersFromGizmo(transformGizmo.object.userData.linkedBoneKey);
             }
         });
         scene.add(transformGizmo);
 
-        // Raycasting for Node selection clicks
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
@@ -145,7 +145,6 @@
         const visualMarkers = [];
         const clickableTargets = [];
 
-        // Full Comprehensive Mixamo Rig Hierarchy Targets
         const boneTargetNames = {
             head: "Head",
             spine: "Spine1",
@@ -156,7 +155,7 @@
             hipL: "LeftUpLeg",
             hipR: "RightUpLeg",
             kneeL: "LeftLeg",
-            kneeyR: "RightLeg"
+            kneeR: "RightLeg"
         };
 
         function loadCharacterAsset() {
@@ -184,7 +183,7 @@
                         if (child.name.endsWith(boneTargetNames.hipL)) boneMap.hipL = child;
                         if (child.name.endsWith(boneTargetNames.hipR)) boneMap.hipR = child;
                         if (child.name.endsWith(boneTargetNames.kneeL)) boneMap.kneeL = child;
-                        if (child.name.endsWith(boneTargetNames.kneeyR)) boneMap.kneeR = child;
+                        if (child.name.endsWith(boneTargetNames.kneeR)) boneMap.kneeR = child;
                     }
                 });
 
@@ -204,14 +203,12 @@
             let activeBonesCount = 0;
 
             Object.keys(boneTargetNames).forEach(key => {
-                // Adjust name map matching for knee element variant name safely
-                let mappedKey = key === 'kneeyR' ? 'kneeR' : key;
-                if (boneMap[mappedKey]) {
-                    const btnId = 'btn-' + mappedKey.replace(/([A-Z])/g, "-$1").toLowerCase();
+                if (boneMap[key]) {
+                    const btnId = 'btn-' + key.replace(/([A-Z])/g, "-$1").toLowerCase();
                     const element = document.getElementById(btnId);
                     if (element) element.classList.add('mapped');
                     
-                    attachTrackerDot(boneMap[mappedKey], mappedKey);
+                    attachTrackerDot(boneMap[key], key);
                     activeBonesCount++;
                 }
             });
@@ -234,7 +231,6 @@
             const sphere = new THREE.Mesh(markerGeo, markerMat);
             sphere.renderOrder = 999;
             
-            // Link custom identifiers onto the interactable nodes
             sphere.userData = { isNode: true, boneKey: boneKey, linkedBone: boneTarget };
             
             scene.add(sphere);
@@ -244,7 +240,6 @@
 
         // --- Click Selection System ---
         window.addEventListener('click', (event) => {
-            // Calculate screen cursor bounds
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -253,11 +248,10 @@
 
             if (intersects.length > 0) {
                 const targetNode = intersects[0].object;
-                // Snap our transformation handles directly onto the underlying bone object
                 transformGizmo.attach(targetNode.userData.linkedBone);
-                transformGizmo.object.userData.linkedBone = targetNode.userData.boneKey;
+                // Keep track of the string key inside the gizmo object state wrapper
+                transformGizmo.object.userData.linkedBoneKey = targetNode.userData.boneKey;
             } else {
-                // If clicking empty space and not actively moving the handles, detach
                 if (transformGizmo.dragging === false && !event.target.closest('#ui-sidebar')) {
                     transformGizmo.detach();
                 }
@@ -273,9 +267,12 @@
             let sliderId = 'slider-' + boneKey.replace(/([A-Z])/g, "-$1").toLowerCase();
             let valId = 'val-' + boneKey.replace(/([A-Z])/g, "-$1").toLowerCase();
             
-            if (boneKey.includes('shoulder') || boneKey.includes('hip')) {
-                val = Math.round((bone.rotation.z * 180) / Math.PI);
+            // FIXED: Standard Mixamo shoulder rolls manipulate local Y rotation due to base bone heading offsets
+            if (boneKey.includes('shoulder')) {
+                val = Math.round((bone.rotation.y * 180) / Math.PI);
                 if (boneKey === 'shoulderR') val = -val;
+            } else if (boneKey.includes('hip')) {
+                val = Math.round((bone.rotation.z * 180) / Math.PI);
             } else if (boneKey.includes('elbow') || boneKey.includes('knee') || boneKey === 'head' || boneKey === 'spine') {
                 val = Math.round((bone.rotation.x * 180) / Math.PI);
             }
@@ -345,8 +342,9 @@
 
             setupSlider('head', 'head', 'x');
             setupSlider('spine', 'spine', 'x');
-            setupSlider('shoulder-l', 'shoulderL', 'z');
-            setupSlider('shoulder-r', 'shoulderR', 'z', true);
+            // FIXED: Set shoulder controllers to map cleanly onto local Y axes adjustments
+            setupSlider('shoulder-l', 'shoulderL', 'y');
+            setupSlider('shoulder-r', 'shoulderR', 'y', true);
             setupSlider('elbow-l', 'elbowL', 'x');
             setupSlider('elbow-r', 'elbowR', 'x');
             setupSlider('hip-l', 'hipL', 'z');
