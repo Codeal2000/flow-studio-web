@@ -112,7 +112,6 @@
         scene.add(grid);
 
         // --- Core Rig System State Variables ---
-        let targetSkeleton = null;
         let boneMap = {};
         const visualMarkers = [];
 
@@ -126,8 +125,9 @@
         // --- GLTF Character Loader Pipeline ---
         function loadCharacterAsset() {
             const loader = new THREE.GLTFLoader();
-            // Using a clean, uncompressed standard low-poly skinning dummy model
-            const modelUrl = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/XBot.glb';
+            
+            // TARGET FIXED: Points directly to your local uploaded repository file to stop CORS blocks
+            const modelUrl = 'XBot.glb';
 
             loader.load(modelUrl, (gltf) => {
                 const character = gltf.scene;
@@ -143,7 +143,6 @@
                     }
                     // Extract internal skeleton joints
                     if (child.isBone) {
-                        // Check for common variants in names (standard string matching)
                         if (child.name.includes(boneTargetNames.shoulderL)) boneMap.shoulderL = child;
                         if (child.name.includes(boneTargetNames.shoulderR)) boneMap.shoulderR = child;
                         if (child.name.includes(boneTargetNames.elbowL)) boneMap.elbowL = child;
@@ -157,7 +156,7 @@
                 let percent = Math.round((xhr.loaded / xhr.total) * 100);
                 document.getElementById('pipeline-loader').innerText = `📥 Downloading Rig Framework: ${percent}%`;
             }, (error) => {
-                console.warn("External model asset pipeline blocked. Activating local generator alternative...", error);
+                console.warn("Local model asset framework failed to load. Running fallback...", error);
                 generateFallbackRigEngine();
             });
         }
@@ -193,7 +192,7 @@
             visualMarkers.push({ sphere, bone: boneTarget });
         }
 
-        // --- Fallback Rig Engine (In case of network failures or offline loading) ---
+        // --- Fallback Rig Engine ---
         function generateFallbackRigEngine() {
             document.getElementById('pipeline-loader').innerText = "⚙ Offline Fallback Engine Initialized";
             
@@ -254,7 +253,6 @@
             document.getElementById('slider-elbow-l').addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById('val-elbow-l').innerText = val + "°";
-                // Mixamo models bend along the X-axis for joints natively
                 if (boneMap.elbowL) boneMap.elbowL.rotation.x = (val * Math.PI) / 180;
             });
         }
@@ -264,12 +262,11 @@
             loadCharacterAsset();
         });
 
-        // --- Realtime Frame Loop rendering updates ---
+        // --- Realtime Frame Loop ---
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
 
-            // Project neon dots cleanly onto spatial coordinates
             visualMarkers.forEach(item => {
                 const worldPos = new THREE.Vector3();
                 item.bone.getWorldPosition(worldPos);
@@ -280,7 +277,7 @@
         }
         animate();
 
-        // --- Responsive Viewport Matrix Re-calculation ---
+        // --- Viewport Resize Handler ---
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
