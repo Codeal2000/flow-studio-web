@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flow Studio Pro - Advanced Rig Driver</title>
+    <title>Flow Studio Pro - Motion Capture Engine</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background-color: #050505; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
@@ -24,9 +24,18 @@
         
         #pipeline-loader { background: rgba(0, 122, 255, 0.15); border: 1px solid #007aff; padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #fff; text-align: center; font-weight: 500; transition: all 0.3s ease; }
         
-        .instruction-note { font-size: 0.75rem; color: #00ff64; background: rgba(0, 255, 100, 0.08); border: 1px solid rgba(0, 255, 100, 0.2); padding: 8px; border-radius: 6px; text-align: center; }
+        .video-upload-box {
+            background: rgba(255, 255, 255, 0.02); border: 2px dashed rgba(255,255,255,0.1);
+            padding: 16px; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.2s ease;
+        }
+        .video-upload-box:hover { border-color: #007aff; background: rgba(0, 122, 255, 0.05); }
+        .video-upload-box p { font-size: 0.8rem; color: #aaa; }
+        .video-controls { display: flex; gap: 8px; margin-top: 8px; }
+        .v-btn { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 6px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; text-align: center;}
+        .v-btn:hover { background: #222; }
+        .v-btn.active { background: #007aff; border-color: #007aff; }
 
-        .slider-group { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); padding: 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; }
+        .slider-group { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); padding: 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 150px; overflow-y: auto; }
         .control-row { display: flex; flex-direction: column; gap: 4px; }
         .control-row label { font-size: 0.72rem; color: #aaa; display: flex; justify-content: space-between; }
         .control-row input { width: 100%; accent-color: #007aff; cursor: pointer; background: #222; height: 4px; border-radius: 2px; outline: none; }
@@ -42,11 +51,15 @@
         .marker-dot { width: 6px; height: 6px; border-radius: 50%; background: #444; }
         .bone-btn.mapped .marker-dot { background: #00ff64; box-shadow: 0 0 6px #00ff64; }
     </style>
-    <!-- Three.js Dependencies & TransformControls Gizmo Extension -->
+    <!-- Core Engine Dependencies -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+    <!-- Step 3 Dependencies: MediaPipe Tracking AI Framework -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -55,19 +68,30 @@
         
         <div id="pipeline-loader">📡 Stream Initialization Active...</div>
         
-        <div class="instruction-note">💡 Click any green node in the viewport to attach the 3D Rotation Gizmo!</div>
+        <div>
+            <div class="section-title">VFX Rotoscope Plate Input</div>
+            <div class="video-upload-box" onclick="document.getElementById('video-input').click()">
+                <p id="upload-status">📁 Click to upload reference footage (.mp4)</p>
+                <input type="file" id="video-input" accept="video/mp4" style="display:none;">
+            </div>
+            <div class="video-controls">
+                <button class="v-btn" id="btn-video-play">Play / Pause</button>
+                <button class="v-btn" id="btn-mesh-opacity">Toggle Mesh Style</button>
+            </div>
+            <div class="video-controls">
+                <button class="v-btn" id="btn-mocap-toggle">🔴 AI Mocap Stream: OFF</button>
+            </div>
+        </div>
 
         <div>
             <div class="section-title">Manual Manipulation Controls</div>
             <div class="slider-group">
-                <!-- Upper Body -->
                 <div class="control-row"><label><span>Head (X Axis)</span><span id="val-head">0°</span></label><input type="range" id="slider-head" min="-45" max="45" value="0"></div>
                 <div class="control-row"><label><span>Spine (X Axis)</span><span id="val-spine">0°</span></label><input type="range" id="slider-spine" min="-30" max="45" value="0"></div>
                 <div class="control-row"><label><span>Left Shoulder Roll</span><span id="val-shoulder-l">0°</span></label><input type="range" id="slider-shoulder-l" min="-90" max="90" value="0"></div>
                 <div class="control-row"><label><span>Right Shoulder Roll</span><span id="val-shoulder-r">0°</span></label><input type="range" id="slider-shoulder-r" min="-90" max="90" value="0"></div>
                 <div class="control-row"><label><span>Left Elbow Hinge</span><span id="val-elbow-l">0°</span></label><input type="range" id="slider-elbow-l" min="0" max="130" value="0"></div>
                 <div class="control-row"><label><span>Right Elbow Hinge</span><span id="val-elbow-r">0°</span></label><input type="range" id="slider-elbow-r" min="0" max="130" value="0"></div>
-                <!-- Lower Body -->
                 <div class="control-row"><label><span>Left Hip Roll</span><span id="val-hip-l">0°</span></label><input type="range" id="slider-hip-l" min="-30" max="90" value="0"></div>
                 <div class="control-row"><label><span>Right Hip Roll</span><span id="val-hip-r">0°</span></label><input type="range" id="slider-hip-r" min="-30" max="90" value="0"></div>
                 <div class="control-row"><label><span>Left Knee Hinge</span><span id="val-knee-l">0°</span></label><input type="range" id="slider-knee-l" min="-130" max="0" value="0"></div>
@@ -113,12 +137,18 @@
         controls.dampingFactor = 0.05;
         controls.target.set(0, 1.0, 0);
 
-        // --- Interactive 3D Gizmo Initialization ---
+        // --- Step 2 & 3 Global Tracking States ---
+        let videoElement, videoTexture, videoBackgroundPlane;
+        let isXrayMeshMode = false;
+        let isMocapActive = false;
+        let poseTrackerEngine;
+        const characterMeshes = [];
+
+        // --- Interactive 3D Gizmo System ---
         const transformGizmo = new THREE.TransformControls(camera, renderer.domElement);
         transformGizmo.setMode('rotate');
         transformGizmo.setSize(0.6);
         
-        // FIXED: Changed listener from 'driving-changed' to 'dragging-changed' to properly lock camera controls
         transformGizmo.addEventListener('dragging-changed', (event) => {
             controls.enabled = !event.value;
         });
@@ -158,6 +188,162 @@
             kneeR: "RightLeg"
         };
 
+        // --- Step 3: Core Mathematical Skeletal Kinematics Solver ---
+        function computeJointAngle2D(jointA, jointB) {
+            // Evaluates local plane deflection vectors across tracking matrices
+            return Math.atan2(jointB.y - jointA.y, jointB.x - jointA.x);
+        }
+
+        function setupMocapTrackingBrain() {
+            poseTrackerEngine = new Pose({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+            });
+
+            poseTrackerEngine.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            poseTrackerEngine.onResults((results) => {
+                if (!isMocapActive || !results.poseLandmarks) return;
+
+                const landmarks = results.poseLandmarks;
+
+                // Index pointers mapping to native MediaPipe skeletal structure
+                const L_Shoulder = landmarks[11];
+                const R_Shoulder = landmarks[12];
+                const L_Elbow = landmarks[13];
+                const R_Elbow = landmarks[14];
+                const L_Wrist = landmarks[15];
+                const R_Wrist = landmarks[16];
+                const L_Hip = landmarks[23];
+                const R_Hip = landmarks[24];
+                const L_Knee = landmarks[25];
+                const R_Knee = landmarks[26];
+                const L_Ankle = landmarks[27];
+                const R_Ankle = landmarks[28];
+
+                // --- Calculate Left Arm Angles ---
+                if (boneMap.shoulderL && L_Shoulder && L_Elbow) {
+                    let angle = computeJointAngle2D(L_Shoulder, L_Elbow) + Math.PI;
+                    boneMap.shoulderL.rotation.y = angle;
+                    updateSliderUIElement('shoulder-l', Math.round((angle * 180) / Math.PI));
+                }
+                if (boneMap.elbowL && L_Elbow && L_Wrist) {
+                    let angle = Math.abs(computeJointAngle2D(L_Elbow, L_Wrist) - computeJointAngle2D(L_Shoulder, L_Elbow));
+                    boneMap.elbowL.rotation.x = Math.max(0, Math.min(angle, 2.2)); // Restricts layout snapping bugs
+                    updateSliderUIElement('elbow-l', Math.round((boneMap.elbowL.rotation.x * 180) / Math.PI));
+                }
+
+                // --- Calculate Right Arm Angles ---
+                if (boneMap.shoulderR && R_Shoulder && R_Elbow) {
+                    let angle = computeJointAngle2D(R_Shoulder, R_Elbow);
+                    boneMap.shoulderR.rotation.y = -angle;
+                    updateSliderUIElement('shoulder-r', Math.round((angle * 180) / Math.PI));
+                }
+                if (boneMap.elbowR && R_Elbow && R_Wrist) {
+                    let angle = Math.abs(computeJointAngle2D(R_Elbow, R_Wrist) - computeJointAngle2D(R_Shoulder, R_Elbow));
+                    boneMap.elbowR.rotation.x = Math.max(0, Math.min(angle, 2.2));
+                    updateSliderUIElement('elbow-r', Math.round((boneMap.elbowR.rotation.x * 180) / Math.PI));
+                }
+
+                // --- Calculate Hips and Lower Extremities ---
+                if (boneMap.hipL && L_Hip && L_Knee) {
+                    let angle = computeJointAngle2D(L_Hip, L_Knee) - Math.PI / 2;
+                    boneMap.hipL.rotation.z = -angle;
+                    updateSliderUIElement('hip-l', Math.round((angle * 180) / Math.PI));
+                }
+                if (boneMap.kneeL && L_Knee && L_Ankle) {
+                    let angle = computeJointAngle2D(L_Knee, L_Ankle) - computeJointAngle2D(L_Hip, L_Knee);
+                    boneMap.kneeL.rotation.x = -Math.max(0, Math.min(Math.abs(angle), 2.2));
+                    updateSliderUIElement('knee-l', Math.round((boneMap.kneeL.rotation.x * 180) / Math.PI));
+                }
+
+                if (boneMap.hipR && R_Hip && R_Knee) {
+                    let angle = computeJointAngle2D(R_Hip, R_Knee) - Math.PI / 2;
+                    boneMap.hipR.rotation.z = -angle;
+                    updateSliderUIElement('hip-r', Math.round((angle * 180) / Math.PI));
+                }
+                if (boneMap.kneeR && R_Knee && R_Ankle) {
+                    let angle = computeJointAngle2D(R_Knee, R_Ankle) - computeJointAngle2D(R_Hip, R_Knee);
+                    boneMap.kneeR.rotation.x = -Math.max(0, Math.min(Math.abs(angle), 2.2));
+                    updateSliderUIElement('knee-r', Math.round((boneMap.kneeR.rotation.x * 180) / Math.PI));
+                }
+            });
+
+            // Connect UI tracking activator button toggle
+            const mocapBtn = document.getElementById('btn-mocap-toggle');
+            mocapBtn.addEventListener('click', () => {
+                isMocapActive = !isMocapActive;
+                if (isMocapActive) {
+                    mocapBtn.innerText = "🟢 AI Mocap Stream: RUNNING";
+                    mocapBtn.classList.add('active');
+                } else {
+                    mocapBtn.innerText = "🔴 AI Mocap Stream: OFF";
+                    mocapBtn.classList.remove('active');
+                }
+            });
+        }
+
+        function updateSliderUIElement(id, val) {
+            const slider = document.getElementById('slider-' + id);
+            const display = document.getElementById('val-' + id);
+            if (slider && display) {
+                slider.value = val;
+                display.innerText = val + "°";
+            }
+        }
+
+        // --- Step 2: Video Asset Processing Pipeline ---
+        function setupVideoBackgroundSystem() {
+            videoElement = document.createElement('video');
+            videoElement.loop = true;
+            videoElement.muted = true;
+            videoElement.playsInline = true;
+
+            videoTexture = new THREE.VideoTexture(videoElement);
+            videoTexture.minFilter = THREE.LinearFilter;
+            videoTexture.magFilter = THREE.LinearFilter;
+
+            const bgGeometry = new THREE.PlaneGeometry(2, 2);
+            const bgMaterial = new THREE.MeshBasicMaterial({ map: videoTexture, depthTest: false, depthWrite: false });
+            videoBackgroundPlane = new THREE.Mesh(bgGeometry, bgMaterial);
+            videoBackgroundPlane.position.set(0, 0, -1);
+            
+            const backgroundScene = new THREE.Scene();
+            const backgroundCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            backgroundScene.add(videoBackgroundPlane);
+            
+            renderer.autoClear = false;
+            window.backgroundPipeline = { scene: backgroundScene, camera: backgroundCamera };
+
+            document.getElementById('video-input').addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const url = URL.createObjectURL(file);
+                    videoElement.src = url;
+                    videoElement.play();
+                    document.getElementById('upload-status').innerText = `🎥 Active Plate: ${file.name}`;
+                }
+            });
+
+            document.getElementById('btn-video-play').addEventListener('click', () => {
+                if (videoElement.paused) videoElement.play();
+                else videoElement.pause();
+            });
+
+            document.getElementById('btn-mesh-opacity').addEventListener('click', () => {
+                isXrayMeshMode = !isXrayMeshMode;
+                characterMeshes.forEach(mesh => {
+                    mesh.material.transparent = isXrayMeshMode;
+                    mesh.material.opacity = isXrayMeshMode ? 0.35 : 1.0;
+                    mesh.material.wireframe = isXrayMeshMode;
+                });
+            });
+        }
+
         function loadCharacterAsset() {
             const loader = new THREE.GLTFLoader();
             const modelUrl = 'Xbot.glb';
@@ -168,6 +354,7 @@
                 character.traverse((child) => {
                     if (child.isMesh) {
                         child.castShadow = true;
+                        characterMeshes.push(child);
                         if (child.material) {
                             child.material.skinning = true; 
                             child.material.roughness = 0.5;
@@ -238,7 +425,6 @@
             clickableTargets.push(sphere);
         }
 
-        // --- Click Selection System ---
         window.addEventListener('click', (event) => {
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -249,7 +435,6 @@
             if (intersects.length > 0) {
                 const targetNode = intersects[0].object;
                 transformGizmo.attach(targetNode.userData.linkedBone);
-                // Keep track of the string key inside the gizmo object state wrapper
                 transformGizmo.object.userData.linkedBoneKey = targetNode.userData.boneKey;
             } else {
                 if (transformGizmo.dragging === false && !event.target.closest('#ui-sidebar')) {
@@ -258,16 +443,13 @@
             }
         });
 
-        // --- Sync Slider Readouts From Gizmo rotations ---
         function updateSlidersFromGizmo(boneKey) {
             const bone = boneMap[boneKey];
             if (!bone) return;
 
             let val = 0;
             let sliderId = 'slider-' + boneKey.replace(/([A-Z])/g, "-$1").toLowerCase();
-            let valId = 'val-' + boneKey.replace(/([A-Z])/g, "-$1").toLowerCase();
             
-            // FIXED: Standard Mixamo shoulder rolls manipulate local Y rotation due to base bone heading offsets
             if (boneKey.includes('shoulder')) {
                 val = Math.round((bone.rotation.y * 180) / Math.PI);
                 if (boneKey === 'shoulderR') val = -val;
@@ -277,12 +459,7 @@
                 val = Math.round((bone.rotation.x * 180) / Math.PI);
             }
 
-            const slider = document.getElementById(sliderId);
-            const display = document.getElementById(valId);
-            if (slider && display) {
-                slider.value = val;
-                display.innerText = val + "°";
-            }
+            updateSliderUIElement(boneKey.replace(/([A-Z])/g, "-$1").toLowerCase(), val);
         }
 
         function generateFallbackRigEngine() {
@@ -308,6 +485,7 @@
 
             const mat = new THREE.MeshStandardMaterial({ color: 0x007aff, wireframe: true, skinning: true });
             const fallbackMesh = new THREE.SkinnedMesh(geometry, mat);
+            characterMeshes.push(fallbackMesh);
             fallbackMesh.add(root);
             fallbackMesh.bind(new THREE.Skeleton([root, child]));
             fallbackMesh.position.y = 1.0;
@@ -327,12 +505,11 @@
         function bindControlListeners() {
             const setupSlider = (id, boneKey, axis, inverted = false) => {
                 const slider = document.getElementById('slider-' + id);
-                const display = document.getElementById('val-' + id);
                 if (!slider) return;
                 
                 slider.addEventListener('input', (e) => {
                     const val = parseFloat(e.target.value);
-                    display.innerText = val + "°";
+                    document.getElementById('val-' + id).innerText = val + "°";
                     if (boneMap[boneKey]) {
                         let rad = (val * Math.PI) / 180;
                         boneMap[boneKey].rotation[axis] = inverted ? -rad : rad;
@@ -342,7 +519,6 @@
 
             setupSlider('head', 'head', 'x');
             setupSlider('spine', 'spine', 'x');
-            // FIXED: Set shoulder controllers to map cleanly onto local Y axes adjustments
             setupSlider('shoulder-l', 'shoulderL', 'y');
             setupSlider('shoulder-r', 'shoulderR', 'y', true);
             setupSlider('elbow-l', 'elbowL', 'x');
@@ -354,6 +530,8 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
+            setupVideoBackgroundSystem();
+            setupMocapTrackingBrain();
             loadCharacterAsset();
         });
 
@@ -367,6 +545,15 @@
                 item.sphere.position.copy(worldPos);
             });
 
+            // Handle frame-by-frame asset passing directly into the AI Engine matrix
+            if (isMocapActive && poseTrackerEngine && videoElement && !videoElement.paused) {
+                poseTrackerEngine.send({ image: videoElement });
+            }
+
+            renderer.clear();
+            if (window.backgroundPipeline && videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
+                renderer.render(window.backgroundPipeline.scene, window.backgroundPipeline.camera);
+            }
             renderer.render(scene, camera);
         }
         animate();
