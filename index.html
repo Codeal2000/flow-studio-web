@@ -35,7 +35,22 @@
         .v-btn:hover { background: #222; }
         .v-btn.active { background: #007aff; border-color: #007aff; }
 
-        .slider-group { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); padding: 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 150px; overflow-y: auto; }
+        /* Floating Diagnostic PIP Window */
+        #diagnostic-monitor {
+            position: absolute; bottom: 20px; right: 20px; z-index: 10;
+            width: 280px; height: 180px; background: #111;
+            border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);
+            overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column;
+        }
+        #diagnostic-monitor .title {
+            font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+            padding: 6px 10px; background: rgba(255,255,255,0.03); color: #888;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        #mocap-canvas { width: 100%; height: calc(100% - 24px); object-fit: cover; background: #000; }
+
+        .slider-group { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); padding: 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 130px; overflow-y: auto; }
         .control-row { display: flex; flex-direction: column; gap: 4px; }
         .control-row label { font-size: 0.72rem; color: #aaa; display: flex; justify-content: space-between; }
         .control-row input { width: 100%; accent-color: #007aff; cursor: pointer; background: #222; height: 4px; border-radius: 2px; outline: none; }
@@ -57,9 +72,9 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
-    <!-- Step 3 Dependencies: MediaPipe Tracking AI Framework -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <!-- MediaPipe Tracking Framework & Utility Draw Extensions -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -116,6 +131,12 @@
         </div>
     </div>
 
+    <!-- PIP Diagnostic Feedback Viewport -->
+    <div id="diagnostic-monitor">
+        <div class="title">📡 AI tracking diagnostic monitor</div>
+        <canvas id="mocap-canvas"></canvas>
+    </div>
+
     <div id="canvas-container"></div>
 
     <script>
@@ -137,11 +158,13 @@
         controls.dampingFactor = 0.05;
         controls.target.set(0, 1.0, 0);
 
-        // --- Step 2 & 3 Global Tracking States ---
+        // --- PIP & Machine Learning Framework Matrix Global Configurations ---
         let videoElement, videoTexture, videoBackgroundPlane;
+        let diagnosticCanvas, diagnosticCtx;
         let isXrayMeshMode = false;
         let isMocapActive = false;
         let poseTrackerEngine;
+        let lastProcessedTime = 0;
         const characterMeshes = [];
 
         // --- Interactive 3D Gizmo System ---
@@ -188,13 +211,15 @@
             kneeR: "RightLeg"
         };
 
-        // --- Step 3: Core Mathematical Skeletal Kinematics Solver ---
         function computeJointAngle2D(jointA, jointB) {
-            // Evaluates local plane deflection vectors across tracking matrices
             return Math.atan2(jointB.y - jointA.y, jointB.x - jointA.x);
         }
 
+        // --- Updated Step 3: Tracking Solver with Visible Skeleton PIP Draw ---
         function setupMocapTrackingBrain() {
+            diagnosticCanvas = document.getElementById('mocap-canvas');
+            diagnosticCtx = diagnosticCanvas.getContext('2d');
+
             poseTrackerEngine = new Pose({
                 locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
             });
@@ -207,11 +232,19 @@
             });
 
             poseTrackerEngine.onResults((results) => {
-                if (!isMocapActive || !results.poseLandmarks) return;
+                // Clear and render raw video frame inside our visual PIP window
+                diagnosticCtx.clearRect(0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
+                diagnosticCtx.drawImage(results.image, 0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
+
+                if (!results.poseLandmarks) return;
+
+                // Draw visible tracking rig markers over video in the PIP window
+                drawConnectors(diagnosticCtx, results.poseLandmarks, POSE_CONNECTORS, { color: '#00ff64', lineWidth: 2 });
+                drawLandmarks(diagnosticCtx, results.poseLandmarks, { color: '#007aff', lineWidth: 1, radius: 2 });
+
+                if (!isMocapActive) return;
 
                 const landmarks = results.poseLandmarks;
-
-                // Index pointers mapping to native MediaPipe skeletal structure
                 const L_Shoulder = landmarks[11];
                 const R_Shoulder = landmarks[12];
                 const L_Elbow = landmarks[13];
@@ -225,7 +258,7 @@
                 const L_Ankle = landmarks[27];
                 const R_Ankle = landmarks[28];
 
-                // --- Calculate Left Arm Angles ---
+                // Left Arm Transform mappings
                 if (boneMap.shoulderL && L_Shoulder && L_Elbow) {
                     let angle = computeJointAngle2D(L_Shoulder, L_Elbow) + Math.PI;
                     boneMap.shoulderL.rotation.y = angle;
@@ -233,11 +266,11 @@
                 }
                 if (boneMap.elbowL && L_Elbow && L_Wrist) {
                     let angle = Math.abs(computeJointAngle2D(L_Elbow, L_Wrist) - computeJointAngle2D(L_Shoulder, L_Elbow));
-                    boneMap.elbowL.rotation.x = Math.max(0, Math.min(angle, 2.2)); // Restricts layout snapping bugs
+                    boneMap.elbowL.rotation.x = Math.max(0, Math.min(angle, 2.2));
                     updateSliderUIElement('elbow-l', Math.round((boneMap.elbowL.rotation.x * 180) / Math.PI));
                 }
 
-                // --- Calculate Right Arm Angles ---
+                // Right Arm Transform mappings
                 if (boneMap.shoulderR && R_Shoulder && R_Elbow) {
                     let angle = computeJointAngle2D(R_Shoulder, R_Elbow);
                     boneMap.shoulderR.rotation.y = -angle;
@@ -249,7 +282,7 @@
                     updateSliderUIElement('elbow-r', Math.round((boneMap.elbowR.rotation.x * 180) / Math.PI));
                 }
 
-                // --- Calculate Hips and Lower Extremities ---
+                // Hips & Legs mapping matrices
                 if (boneMap.hipL && L_Hip && L_Knee) {
                     let angle = computeJointAngle2D(L_Hip, L_Knee) - Math.PI / 2;
                     boneMap.hipL.rotation.z = -angle;
@@ -273,7 +306,6 @@
                 }
             });
 
-            // Connect UI tracking activator button toggle
             const mocapBtn = document.getElementById('btn-mocap-toggle');
             mocapBtn.addEventListener('click', () => {
                 isMocapActive = !isMocapActive;
@@ -296,7 +328,6 @@
             }
         }
 
-        // --- Step 2: Video Asset Processing Pipeline ---
         function setupVideoBackgroundSystem() {
             videoElement = document.createElement('video');
             videoElement.loop = true;
@@ -324,6 +355,13 @@
                 if (file) {
                     const url = URL.createObjectURL(file);
                     videoElement.src = url;
+                    
+                    // Force matching sizing dimensions on configuration load profiles
+                    videoElement.addEventListener('loadedmetadata', () => {
+                        diagnosticCanvas.width = videoElement.videoWidth / 2;
+                        diagnosticCanvas.height = videoElement.videoHeight / 2;
+                    });
+                    
                     videoElement.play();
                     document.getElementById('upload-status').innerText = `🎥 Active Plate: ${file.name}`;
                 }
@@ -448,8 +486,6 @@
             if (!bone) return;
 
             let val = 0;
-            let sliderId = 'slider-' + boneKey.replace(/([A-Z])/g, "-$1").toLowerCase();
-            
             if (boneKey.includes('shoulder')) {
                 val = Math.round((bone.rotation.y * 180) / Math.PI);
                 if (boneKey === 'shoulderR') val = -val;
@@ -535,7 +571,7 @@
             loadCharacterAsset();
         });
 
-        function animate() {
+        function animate(timestamp) {
             requestAnimationFrame(animate);
             controls.update();
 
@@ -545,9 +581,12 @@
                 item.sphere.position.copy(worldPos);
             });
 
-            // Handle frame-by-frame asset passing directly into the AI Engine matrix
-            if (isMocapActive && poseTrackerEngine && videoElement && !videoElement.paused) {
-                poseTrackerEngine.send({ image: videoElement });
+            // Throttled frame pipeline feeding data at 30FPS max cadence limits
+            if (poseTrackerEngine && videoElement && !videoElement.paused && timestamp - lastProcessedTime > 33) {
+                if (videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
+                    poseTrackerEngine.send({ image: videoElement });
+                    lastProcessedTime = timestamp;
+                }
             }
 
             renderer.clear();
@@ -556,7 +595,7 @@
             }
             renderer.render(scene, camera);
         }
-        animate();
+        animate(0);
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
