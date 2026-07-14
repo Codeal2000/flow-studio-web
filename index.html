@@ -258,23 +258,39 @@
                 });
 
                 poseTrackerEngine.onResults((results) => {
-                 // --- CORRECTED ARM ROTATION SOLVERS ---
+                    lastTrackingResults = results;
+
+                    if (!isMocapActive || !results.poseLandmarks) return;
+
+                    const landmarks = results.poseLandmarks;
+                    const L_Shoulder = landmarks[11];
+                    const R_Shoulder = landmarks[12];
+                    const L_Elbow = landmarks[13];
+                    const R_Elbow = landmarks[14];
+                    const L_Wrist = landmarks[15];
+                    const R_Wrist = landmarks[16];
+                    const L_Hip = landmarks[23];
+                    const R_Hip = landmarks[24];
+                    const L_Knee = landmarks[25];
+                    const R_Knee = landmarks[26];
+                    const L_Ankle = landmarks[27];
+                    const R_Ankle = landmarks[28];
+
+                    // --- CORRECTED ARM ROTATION SOLVERS (Z-AXIS PROJECTIONS) ---
                     
-                    // Left Arm Solver (Corrected for outward T-pose projection)
+                    // Left Arm Solver (Raises outward, matches standard T-pose setup)
                     if (boneMap.shoulderL && L_Shoulder && L_Elbow) {
-                        // Subtracting the offset coordinates so raising the arm pulls it outward on the Z/Y axes
                         let angle = computeJointAngle2D(L_Shoulder, L_Elbow);
                         boneMap.shoulderL.rotation.z = angle + Math.PI; 
                         updateSliderUIElement('shoulder-l', Math.round(((angle + Math.PI) * 180) / Math.PI));
                     }
                     if (boneMap.elbowL && L_Elbow && L_Wrist) {
-                        // Lock the hinge rotation axis and clamp the value so it only folds forward naturally
                         let angle = Math.abs(computeJointAngle2D(L_Shoulder, L_Elbow) - computeJointAngle2D(L_Elbow, L_Wrist));
                         boneMap.elbowL.rotation.z = -Math.max(0, Math.min(angle, 2.2)); 
                         updateSliderUIElement('elbow-l', Math.round((Math.abs(boneMap.elbowL.rotation.z) * 180) / Math.PI));
                     }
 
-                    // Right Arm Solver (Corrected for outward T-pose projection)
+                    // Right Arm Solver (Raises outward, matches standard T-pose setup)
                     if (boneMap.shoulderR && R_Shoulder && R_Elbow) {
                         let angle = computeJointAngle2D(R_Shoulder, R_Elbow);
                         boneMap.shoulderR.rotation.z = angle; 
@@ -284,30 +300,6 @@
                         let angle = Math.abs(computeJointAngle2D(R_Shoulder, R_Elbow) - computeJointAngle2D(R_Elbow, R_Wrist));
                         boneMap.elbowR.rotation.z = Math.max(0, Math.min(angle, 2.2)); 
                         updateSliderUIElement('elbow-r', Math.round((boneMap.elbowR.rotation.z * 180) / Math.PI));
-                    }
-
-                    // Left Arm Solver
-                    if (boneMap.shoulderL && L_Shoulder && L_Elbow) {
-                        let angle = computeJointAngle2D(L_Shoulder, L_Elbow) + Math.PI;
-                        boneMap.shoulderL.rotation.y = angle;
-                        updateSliderUIElement('shoulder-l', Math.round((angle * 180) / Math.PI));
-                    }
-                    if (boneMap.elbowL && L_Elbow && L_Wrist) {
-                        let angle = Math.abs(computeJointAngle2D(L_Elbow, L_Wrist) - computeJointAngle2D(L_Shoulder, L_Elbow));
-                        boneMap.elbowL.rotation.x = Math.max(0, Math.min(angle, 2.2));
-                        updateSliderUIElement('elbow-l', Math.round((boneMap.elbowL.rotation.x * 180) / Math.PI));
-                    }
-
-                    // Right Arm Solver
-                    if (boneMap.shoulderR && R_Shoulder && R_Elbow) {
-                        let angle = computeJointAngle2D(R_Shoulder, R_Elbow);
-                        boneMap.shoulderR.rotation.y = -angle;
-                        updateSliderUIElement('shoulder-r', Math.round((angle * 180) / Math.PI));
-                    }
-                    if (boneMap.elbowR && R_Elbow && R_Wrist) {
-                        let angle = Math.abs(computeJointAngle2D(R_Elbow, R_Wrist) - computeJointAngle2D(R_Shoulder, R_Elbow));
-                        boneMap.elbowR.rotation.x = Math.max(0, Math.min(angle, 2.2));
-                        updateSliderUIElement('elbow-r', Math.round((boneMap.elbowR.rotation.x * 180) / Math.PI));
                     }
 
                     // Left Leg Solver
@@ -344,13 +336,13 @@
                 if (isMocapActive) {
                     mocapBtn.innerText = "🟢 AI Mocap Stream: RUNNING";
                     mocapBtn.classList.add('active');
-                    // Detach gizmos to prevent manual edit fighting with motion capture tracking
+                    // Detach manual gizmos to prevent conflicts with live pose tracking
                     transformGizmo.detach();
                     controls.enabled = true;
                 } else {
                     mocapBtn.innerText = "🔴 AI Mocap Stream: OFF";
                     mocapBtn.classList.remove('active');
-                    controls.enabled = true; // Ensure orbiting immediately unlocks
+                    controls.enabled = true; // Ensure orbit controls unlock
                 }
             });
         }
@@ -566,7 +558,7 @@
                 transformGizmo.attach(targetNode.userData.linkedBone);
                 transformGizmo.object.userData.linkedBoneKey = targetNode.userData.boneKey;
             } else {
-                // If clicked off joints, detach Gizmo & make sure OrbitControls can run
+                // Detach Gizmo and ensure OrbitControls is unlocked when clicking off joints
                 if (transformGizmo.dragging === false) {
                     transformGizmo.detach();
                     controls.enabled = true;
@@ -580,7 +572,7 @@
 
             let val = 0;
             if (boneKey.includes('shoulder')) {
-                val = Math.round((bone.rotation.y * 180) / Math.PI);
+                val = Math.round((bone.rotation.z * 180) / Math.PI);
                 if (boneKey === 'shoulderR') val = -val;
             } else if (boneKey.includes('hip')) {
                 val = Math.round((bone.rotation.z * 180) / Math.PI);
@@ -648,10 +640,10 @@
 
             setupSlider('head', 'head', 'x');
             setupSlider('spine', 'spine', 'x');
-            setupSlider('shoulder-l', 'shoulderL', 'y');
-            setupSlider('shoulder-r', 'shoulderR', 'y', true);
-            setupSlider('elbow-l', 'elbowL', 'x');
-            setupSlider('elbow-r', 'elbowR', 'x');
+            setupSlider('shoulder-l', 'shoulderL', 'z');
+            setupSlider('shoulder-r', 'shoulderR', 'z', true);
+            setupSlider('elbow-l', 'elbowL', 'z');
+            setupSlider('elbow-r', 'elbowR', 'z');
             setupSlider('hip-l', 'hipL', 'z');
             setupSlider('hip-r', 'hipR', 'z');
             setupSlider('knee-l', 'kneeL', 'x');
@@ -680,7 +672,6 @@
                 diagnosticCtx.drawImage(videoElement, 0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
 
                 if (lastTrackingResults && lastTrackingResults.poseLandmarks) {
-                    // Safe verification: draws lines only if drawingUtils exists
                     if (typeof drawConnectors !== 'undefined' && typeof POSE_CONNECTORS !== 'undefined') {
                         drawConnectors(diagnosticCtx, lastTrackingResults.poseLandmarks, POSE_CONNECTORS, { color: '#00ff64', lineWidth: 2 });
                     }
