@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flow Studio Pro - Keyframe Alignment Engine</title>
+    <title>Flow Studio Pro - Motion Aligner</title>
     
     <!-- Three.js Infrastructure -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -34,38 +34,6 @@
 
         #app-container { width: 100vw; height: 100vh; position: relative; }
         #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
-
-        /* Welcome Tutorial Onboarding Overlay */
-        #welcome-tutorial {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 100;
-            background: rgba(10, 10, 12, 0.95);
-            border: 2px solid var(--accent-green);
-            border-radius: 8px;
-            padding: 25px;
-            max-width: 450px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            backdrop-filter: blur(15px);
-            transition: opacity 0.3s ease;
-        }
-        #welcome-tutorial h2 { color: var(--accent-green); margin-bottom: 12px; }
-        #welcome-tutorial p { font-size: 0.85rem; line-height: 1.5; margin-bottom: 15px; color: #a0aec0; }
-        #welcome-tutorial ol { margin-left: 20px; font-size: 0.8rem; margin-bottom: 20px; line-height: 1.6; }
-        #welcome-tutorial button {
-            background: var(--accent-green);
-            color: #000;
-            border: none;
-            padding: 8px 16px;
-            font-family: monospace;
-            font-weight: bold;
-            border-radius: 4px;
-            cursor: pointer;
-            width: 100%;
-        }
-        #welcome-tutorial button:hover { background: #00cc52; }
 
         /* HUD Overlays */
         #hud-display {
@@ -98,7 +66,7 @@
             border: 1px solid var(--border-color);
             padding: 15px;
             border-radius: 6px;
-            width: 320px;
+            width: 340px;
             font-size: 0.8rem;
             line-height: 1.6;
             backdrop-filter: blur(10px);
@@ -192,24 +160,12 @@
 <body>
 
     <div id="app-container">
-        <!-- Welcoming Tutorial Step Card -->
-        <div id="welcome-tutorial">
-            <h2>🎬 Flow Studio Pro</h2>
-            <p>Welcome! We've aligned the camera settings so reference videos load directly behind your character to let you easily snap and correct bones.</p>
-            <ol>
-                <li>Press <b>V</b> to load a video sequence.</li>
-                <li>Press <b>M</b> to automatically track landmarks.</li>
-                <li>Rotate the cyan joints to correct poses, then press <b>R</b> to save.</li>
-            </ol>
-            <button onclick="dismissTutorial()">Let's Go!</button>
-        </div>
-
         <!-- HUD Dashboard Info overlay -->
         <div id="hud-display">
             <div>[M] Mocap Stream: <span id="hud-mocap" class="status-val val-off">OFF</span></div>
             <div>[S] Active Solver: <span id="hud-solver" class="status-val val-math">📐 MATH ENGINE</span></div>
             <div>[R] Keyframes Pool: <span id="hud-dataset" class="status-val" style="color: var(--accent-orange);">0 Poses</span></div>
-            <div id="hud-log" style="margin-top: 8px; color: #8a99ad; max-width: 320px; font-size: 0.75rem;">Press [V] to load video plate. Click dots to attach rotation gizmo.</div>
+            <div id="hud-log" style="margin-top: 8px; color: #8a99ad; max-width: 320px; font-size: 0.75rem;">Press [V] to load video. Use [Q] to snap rig to reference.</div>
         </div>
 
         <!-- Controls Map Card -->
@@ -218,13 +174,14 @@
             <div class="key-row"><span>Load Video Plate</span><span class="key-cap">V</span></div>
             <div class="key-row"><span>Play / Pause</span><span class="key-cap">Space</span></div>
             <div class="key-row"><span>Toggle Auto Mocap Tracker</span><span class="key-cap">M</span></div>
-            <div class="key-row"><span>Toggle Solver (Math / Trained AI)</span><span class="key-cap">S</span></div>
+            <div class="key-row"><span><b>Snap Rig to Video Pose</b></span><span class="key-cap">Q</span></div>
             <div class="key-row"><span>Record/Overwrite Keyframe</span><span class="key-cap">R</span></div>
+            <div class="key-row"><span>Toggle Solver (Math/AI)</span><span class="key-cap">S</span></div>
             <div class="key-row"><span>Train Engine (Fits keyframes)</span><span class="key-cap">T</span></div>
             <div class="key-row"><span>Clear All Keyframes</span><span class="key-cap">C</span></div>
             <div class="key-row"><span>Toggle Wireframe Mesh</span><span class="key-cap">X</span></div>
             <div style="margin-top: 8px; font-size: 0.7rem; color: #8a99ad; border-top: 1px solid var(--border-color); padding-top: 8px;">
-                💡 <b>How to Edit:</b> Use mouse left-click to select any cyan point on the character rig, rotate using the ring gizmo, then press <span class="key-cap">R</span> to update/record. Click keyframe diamonds to jump times.
+                💡 <b>How to Snap & Correct:</b> Pause on any frame, press <span class="key-cap">Q</span> to snap the rig, click the joint dots to make manual corrections, and press <span class="key-cap">R</span> to lock it in!
             </div>
         </div>
 
@@ -252,14 +209,6 @@
     </div>
 
     <script>
-        // Dismiss first-time tutorial modal
-        function dismissTutorial() {
-            document.getElementById('welcome-tutorial').style.opacity = '0';
-            setTimeout(() => {
-                document.getElementById('welcome-tutorial').style.display = 'none';
-            }, 300);
-        }
-
         // --- Core ThreeJS Graphics Engine Setup ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
@@ -290,6 +239,8 @@
         let lastTrackingResults = null; 
         let isProcessingFrame = false; 
         const characterMeshes = [];
+        const ghostMeshGroup = new THREE.Group();
+        scene.add(ghostMeshGroup);
 
         // --- Machine Learning State Storage ---
         let trainingDataset = [];
@@ -314,7 +265,7 @@
             if (event.value && transformGizmo.object && transformGizmo.object.userData.linkedBoneKey) {
                 const boneKey = transformGizmo.object.userData.linkedBoneKey;
                 jointOverrides[boneKey] = true;
-                updateHUDLog(`Locked ${boneKey}. Click empty canvas or press [S] to let engine run it.`);
+                updateHUDLog(`Locked ${boneKey}. Press [S] to unlock auto calculations.`);
             }
         });
         scene.add(transformGizmo);
@@ -399,6 +350,7 @@
             }
         }
 
+        // --- Core Math Trigonometric Pose Solver ---
         function executeTrigonometricSolvers(wLm) {
             const L_Shoulder = createVector3FromLandmark(wLm[11]);
             const R_Shoulder = createVector3FromLandmark(wLm[12]);
@@ -469,6 +421,65 @@
             }
         }
 
+        // --- NEW: Snap Rig to Current Video Frame Pose ---
+        function snapToPose() {
+            if (!lastTrackingResults || !lastTrackingResults.poseWorldLandmarks) {
+                updateHUDLog("❌ Cannot snap: No active mocap tracking data on this frame.");
+                return;
+            }
+            // Temporarily unlock all manual overrides so solver calculations pass to the bones
+            Object.keys(jointOverrides).forEach(key => jointOverrides[key] = false);
+            
+            executeTrigonometricSolvers(lastTrackingResults.poseWorldLandmarks);
+            updateHUDLog("⚡ Snapped rig to current frame reference! Tweak joints now.");
+        }
+
+        // --- NEW: Render Major Ghost Poses of Saved Keyframes ---
+        function updateGhostPoseVisualizer() {
+            // Remove previous ghost visual markers
+            while(ghostMeshGroup.children.length > 0) { 
+                ghostMeshGroup.remove(ghostMeshGroup.children[0]); 
+            }
+
+            trainingDataset.forEach((pose, idx) => {
+                // Generate a visual joint network (stick figure skeleton) representing each keyframe pose
+                const ghostSkeleton = new THREE.Group();
+                const materials = new THREE.LineBasicMaterial({ 
+                    color: 0x007aff, 
+                    transparent: true, 
+                    opacity: 0.25, 
+                    depthTest: false 
+                });
+
+                // Decode features stored as [x1, y1, z1, x2, y2, z2...]
+                const jointCoords = [];
+                for(let i = 0; i < pose.input.length; i += 3) {
+                    // Map from MediaPipe coordinate space into WebGL space coordinate scales
+                    const x = -pose.input[i] * 1.5;
+                    const y = -pose.input[i+1] * 1.5 + 1.2;
+                    const z = -pose.input[i+2] * 1.5;
+                    jointCoords.push(new THREE.Vector3(x, y, z));
+                }
+
+                // Visual Connectors drawing loops
+                const bonesToDraw = [
+                    [0, 1], [0, 2], [1, 3], [2, 4], [3, 5], [4, 6], // Shoulders and arms
+                    [0, 6], [1, 7], [6, 7],                         // Torso
+                    [6, 8], [7, 9], [8, 10], [9, 11]                // Legs
+                ];
+
+                bonesToDraw.forEach(pair => {
+                    if (jointCoords[pair[0]] && jointCoords[pair[1]]) {
+                        const geom = new THREE.BufferGeometry().setFromPoints([jointCoords[pair[0]], jointCoords[pair[1]]]);
+                        const line = new THREE.Line(geom, materials);
+                        ghostSkeleton.add(line);
+                    }
+                });
+
+                ghostMeshGroup.add(ghostSkeleton);
+            });
+        }
+
         // --- MACHINE LEARNING PIPELINE ---
         function initializeNeuralNetworkStructure() {
             const model = tf.sequential();
@@ -514,6 +525,9 @@
 
                 track.appendChild(element);
             });
+
+            // Update visible keyframe ghost rigs
+            updateGhostPoseVisualizer();
         }
 
         function recordCalibrationPose() {
@@ -666,7 +680,7 @@
                     });
                     videoElement.play();
                     playBtn.innerText = "⏸";
-                    updateHUDLog(`Loaded target tracking asset: ${file.name}`);
+                    updateHUDLog(`Loaded video: ${file.name}`);
                 }
             });
 
@@ -750,7 +764,7 @@
         }
 
         window.addEventListener('pointerdown', (event) => {
-            if (event.target.closest('#mocap-timeline-container') || event.target.closest('#hud-display') || event.target.closest('#quick-guide') || event.target.closest('#welcome-tutorial')) return;
+            if (event.target.closest('#mocap-timeline-container') || event.target.closest('#hud-display') || event.target.closest('#quick-guide')) return;
 
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -776,6 +790,9 @@
 
             if (key === 'v') {
                 document.getElementById('video-input').click();
+            }
+            else if (key === 'q') {
+                snapToPose();
             }
             else if (e.code === 'Space') {
                 e.preventDefault();
