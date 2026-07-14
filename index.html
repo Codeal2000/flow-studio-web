@@ -169,7 +169,7 @@
         let diagnosticCanvas, diagnosticCtx;
         let isXrayMeshMode = false;
         let isMocapActive = false;
-        let poseTrackerEngine;
+        let poseTrackerEngine = null;
         let lastProcessedTime = 0;
         let lastTrackingResults = null; 
         let isProcessingFrame = false; 
@@ -246,7 +246,15 @@
             diagnosticCtx = diagnosticCanvas.getContext('2d');
 
             try {
-                poseTrackerEngine = new Pose({
+                // Ensure MediaPipe's globally loaded Pose class exists before compiling
+                const PoseClass = window.Pose || (typeof Pose !== 'undefined' ? Pose : null);
+                if (!PoseClass) {
+                    console.warn("MediaPipe Pose library is not loaded in window space yet. Retrying in 1s...");
+                    setTimeout(setupMocapTrackingBrain, 1000);
+                    return;
+                }
+
+                poseTrackerEngine = new PoseClass({
                     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
                 });
 
@@ -661,22 +669,26 @@
             controls.update();
 
             visualMarkers.forEach(item => {
-                const worldPos = new THREE.Vector3();
-                item.bone.getWorldPosition(worldPos);
-                item.sphere.position.copy(worldPos);
+                if (item.bone && item.sphere) {
+                    const worldPos = new THREE.Vector3();
+                    item.bone.getWorldPosition(worldPos);
+                    item.sphere.position.copy(worldPos);
+                }
             });
 
             // --- Diagnostic Overlay with Fallback Hooks ---
             if (videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
-                diagnosticCtx.clearRect(0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
-                diagnosticCtx.drawImage(videoElement, 0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
+                if (diagnosticCtx && diagnosticCanvas) {
+                    diagnosticCtx.clearRect(0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
+                    diagnosticCtx.drawImage(videoElement, 0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
 
-                if (lastTrackingResults && lastTrackingResults.poseLandmarks) {
-                    if (typeof drawConnectors !== 'undefined' && typeof POSE_CONNECTORS !== 'undefined') {
-                        drawConnectors(diagnosticCtx, lastTrackingResults.poseLandmarks, POSE_CONNECTORS, { color: '#00ff64', lineWidth: 2 });
-                    }
-                    if (typeof drawLandmarks !== 'undefined') {
-                        drawLandmarks(diagnosticCtx, lastTrackingResults.poseLandmarks, { color: '#007aff', lineWidth: 1, radius: 2 });
+                    if (lastTrackingResults && lastTrackingResults.poseLandmarks) {
+                        if (typeof drawConnectors !== 'undefined' && typeof POSE_CONNECTORS !== 'undefined') {
+                            drawConnectors(diagnosticCtx, lastTrackingResults.poseLandmarks, POSE_CONNECTORS, { color: '#00ff64', lineWidth: 2 });
+                        }
+                        if (typeof drawLandmarks !== 'undefined') {
+                            drawLandmarks(diagnosticCtx, lastTrackingResults.poseLandmarks, { color: '#007aff', lineWidth: 1, radius: 2 });
+                        }
                     }
                 }
             }
