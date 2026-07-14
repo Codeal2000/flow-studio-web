@@ -3,21 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flow Studio Pro - Motion Aligner</title>
+    <title>Flow Studio Pro - Local Motion Aligner</title>
     
-    <!-- Three.js Infrastructure -->
+    <!-- Three.js Engine -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
-
-    <!-- MediaPipe Automation Core -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-
-    <!-- TensorFlow.js Core Engine -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
 
     <style>
         :root {
@@ -35,7 +27,7 @@
         #app-container { width: 100vw; height: 100vh; position: relative; }
         #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
 
-        /* HUD Overlays */
+        /* HUD */
         #hud-display {
             position: absolute;
             top: 20px;
@@ -53,10 +45,8 @@
         .status-val { font-weight: bold; }
         .val-on { color: var(--accent-green); }
         .val-off { color: #ff453a; }
-        .val-math { color: #fff; }
-        .val-ai { color: var(--accent-blue); }
 
-        /* Quick-Reference Guide Card */
+        /* Controls Map Card */
         #quick-guide {
             position: absolute;
             top: 20px;
@@ -66,7 +56,7 @@
             border: 1px solid var(--border-color);
             padding: 15px;
             border-radius: 6px;
-            width: 340px;
+            width: 320px;
             font-size: 0.8rem;
             line-height: 1.6;
             backdrop-filter: blur(10px);
@@ -75,6 +65,7 @@
         .key-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
         .key-cap { background: #1c1c24; padding: 1px 6px; border-radius: 3px; border: 1px solid #3a3a4c; font-weight: bold; }
 
+        /* Timeline Player */
         #mocap-timeline-container {
             position: absolute;
             bottom: 20px;
@@ -91,32 +82,24 @@
             gap: 10px;
         }
 
-        /* Interactive Keyframe Track */
         #keyframe-track-wrapper {
             position: relative;
             width: 100%;
-            height: 20px;
+            height: 12px;
             background: #121216;
             border-radius: 4px;
             border: 1px solid #1c1c24;
-            overflow: visible;
         }
         .keyframe-marker {
             position: absolute;
             top: 50%;
             transform: translate(-50%, -50%) rotate(45deg);
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             background: var(--accent-green);
             border: 1px solid #fff;
             cursor: pointer;
             z-index: 10;
-            box-shadow: 0 0 8px var(--accent-green);
-            transition: scale 0.1s ease;
-        }
-        .keyframe-marker:hover {
-            scale: 1.3;
-            background: var(--accent-orange);
         }
 
         .slider-row {
@@ -138,68 +121,38 @@
         #timeline-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--accent-green); cursor: pointer; }
         #timeline-time { font-size: 0.85rem; min-width: 100px; color: var(--text-main); text-align: right; }
 
-        /* Roto-Plate Diagnostic Feed Window */
-        #diagnostic-monitor {
-            position: absolute;
-            bottom: 125px;
-            right: 20px;
-            width: 200px;
-            height: 150px;
-            background: #000;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            overflow: hidden;
-            z-index: 5;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-        }
-        #mocap-canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-
         .hidden-input { display: none; }
     </style>
 </head>
 <body>
 
     <div id="app-container">
-        <!-- HUD Dashboard Info overlay -->
+        <!-- Dashboard Overlay -->
         <div id="hud-display">
-            <div>[M] Mocap Stream: <span id="hud-mocap" class="status-val val-off">OFF</span></div>
-            <div>[S] Active Solver: <span id="hud-solver" class="status-val val-math">📐 MATH ENGINE</span></div>
-            <div>[R] Keyframes Pool: <span id="hud-dataset" class="status-val" style="color: var(--accent-orange);">0 Poses</span></div>
-            <div id="hud-log" style="margin-top: 8px; color: #8a99ad; max-width: 320px; font-size: 0.75rem;">Press [V] to load video. Use [Q] to snap rig to reference.</div>
+            <div>[V] Loaded Video: <span id="hud-video" class="status-val val-off">NONE</span></div>
+            <div>[J] YOLO Motion: <span id="hud-dataset" class="status-val val-off">NOT LOADED</span></div>
+            <div id="hud-log" style="margin-top: 8px; color: #8a99ad; max-width: 320px; font-size: 0.75rem;">Press [V] to select your video. Press [J] to import the 'motion_data.json'.</div>
         </div>
 
-        <!-- Controls Map Card -->
+        <!-- Reference Guide -->
         <div id="quick-guide">
-            <h3>🎬 ANIMATION CONTROLS</h3>
-            <div class="key-row"><span>Load Video Plate</span><span class="key-cap">V</span></div>
+            <h3>🎬 PLAYBACK CONTROLS</h3>
+            <div class="key-row"><span>Load Video File</span><span class="key-cap">V</span></div>
+            <div class="key-row"><span>Load YOLO JSON</span><span class="key-cap">J</span></div>
             <div class="key-row"><span>Play / Pause</span><span class="key-cap">Space</span></div>
-            <div class="key-row"><span>Toggle Auto Mocap Tracker</span><span class="key-cap">M</span></div>
-            <div class="key-row"><span><b>Snap Rig to Video Pose</b></span><span class="key-cap">Q</span></div>
-            <div class="key-row"><span>Record/Overwrite Keyframe</span><span class="key-cap">R</span></div>
-            <div class="key-row"><span>Toggle Solver (Math/AI)</span><span class="key-cap">S</span></div>
-            <div class="key-row"><span>Train Engine (Fits keyframes)</span><span class="key-cap">T</span></div>
-            <div class="key-row"><span>Clear All Keyframes</span><span class="key-cap">C</span></div>
             <div class="key-row"><span>Toggle Wireframe Mesh</span><span class="key-cap">X</span></div>
-            <div style="margin-top: 8px; font-size: 0.7rem; color: #8a99ad; border-top: 1px solid var(--border-color); padding-top: 8px;">
-                💡 <b>How to Snap & Correct:</b> Pause on any frame, press <span class="key-cap">Q</span> to snap the rig, click the joint dots to make manual corrections, and press <span class="key-cap">R</span> to lock it in!
-            </div>
         </div>
 
+        <!-- Hidden File Inputs -->
         <input type="file" id="video-input" class="hidden-input" accept="video/*">
+        <input type="file" id="motion-input" class="hidden-input" accept=".json">
 
-        <!-- Core Three.js Context Canvas -->
+        <!-- 3D Graphics Viewport -->
         <div id="canvas-container"></div>
 
-        <!-- Roto-Plate Diagnostic Feed -->
-        <div id="diagnostic-monitor">
-            <canvas id="mocap-canvas"></canvas>
-        </div>
-
-        <!-- Master Player Controls Timeline -->
+        <!-- Master Player Timeline -->
         <div id="mocap-timeline-container">
-            <!-- Keyframe overlay track bar -->
-            <div id="keyframe-track-wrapper" title="Saved pose keyframes display here. Click diamonds to jump to pose."></div>
-            
+            <div id="keyframe-track-wrapper"></div>
             <div class="slider-row">
                 <button id="btn-video-play">▶</button>
                 <input type="range" id="timeline-slider" min="0" max="100" value="0">
@@ -209,7 +162,7 @@
     </div>
 
     <script>
-        // --- Core ThreeJS Graphics Engine Setup ---
+        // --- 3D Scene Setup ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
@@ -228,52 +181,6 @@
         controls.dampingFactor = 0.05;
         controls.target.set(0, 1.0, 0);
 
-        // --- Global Engine Variables ---
-        let videoElement, videoTexture, videoBackgroundPlane;
-        let diagnosticCanvas, diagnosticCtx;
-        let isXrayMeshMode = false;
-        let isMocapActive = false;
-        let executionMode = 'math'; 
-        let poseTrackerEngine = null;
-        let lastProcessedTime = 0;
-        let lastTrackingResults = null; 
-        let isProcessingFrame = false; 
-        const characterMeshes = [];
-        const ghostMeshGroup = new THREE.Group();
-        scene.add(ghostMeshGroup);
-
-        // --- Machine Learning State Storage ---
-        let trainingDataset = [];
-        let rotationPredictorModel = null;
-        let isModelTrained = false;
-
-        const jointOverrides = {
-            head: false, spine: false,
-            shoulderL: false, shoulderR: false,
-            elbowL: false, elbowR: false,
-            hipL: false, hipR: false,
-            kneeL: false, kneeR: false
-        };
-
-        // --- Interactive 3D Transform Gizmo Engine Setup ---
-        const transformGizmo = new THREE.TransformControls(camera, renderer.domElement);
-        transformGizmo.setMode('rotate');
-        transformGizmo.setSize(0.6);
-        
-        transformGizmo.addEventListener('dragging-changed', (event) => {
-            controls.enabled = !event.value;
-            if (event.value && transformGizmo.object && transformGizmo.object.userData.linkedBoneKey) {
-                const boneKey = transformGizmo.object.userData.linkedBoneKey;
-                jointOverrides[boneKey] = true;
-                updateHUDLog(`Locked ${boneKey}. Press [S] to unlock auto calculations.`);
-            }
-        });
-        scene.add(transformGizmo);
-
-        const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2();
-
-        // Scene Lights & Ground Grid
         scene.add(new THREE.AmbientLight(0xffffff, 0.6));
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
         dirLight.position.set(3, 10, 5);
@@ -282,357 +189,23 @@
         const grid = new THREE.GridHelper(30, 30, 0x1c1c1c, 0x0c0c0c);
         scene.add(grid);
 
+        // --- Core Variables ---
+        let videoElement, videoTexture, videoBackgroundPlane;
+        let isXrayMeshMode = false;
         let boneMap = {};
-        const visualMarkers = [];
-        const clickableTargets = [];
+        let importedMotionTrack = [];
+        const characterMeshes = [];
 
+        // Bone Target Key-Map (Using Xbot Standard Rig names)
         const boneTargetNames = {
-            head: "Head", spine: "Spine1",
             shoulderL: "LeftArm", shoulderR: "RightArm",
             elbowL: "LeftForeArm", elbowR: "RightForeArm",
             hipL: "LeftUpLeg", hipR: "RightUpLeg",
             kneeL: "LeftLeg", kneeR: "RightLeg"
         };
 
-        function createVector3FromLandmark(lm) {
-            return new THREE.Vector3(lm.x, lm.y, lm.z);
-        }
-
-        async function runPipelineInference() {
-            if (!poseTrackerEngine || !videoElement || isProcessingFrame) return;
-            if (videoElement.paused || videoElement.ended) return;
-
-            if (videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
-                isProcessingFrame = true; 
-                try {
-                    await poseTrackerEngine.send({ image: videoElement });
-                } catch (err) {
-                    console.error("Mocap stream drop frame:", err);
-                }
-                isProcessingFrame = false; 
-            }
-        }
-
-        function setupMocapTrackingBrain() {
-            diagnosticCanvas = document.getElementById('mocap-canvas');
-            diagnosticCtx = diagnosticCanvas.getContext('2d');
-
-            try {
-                const PoseClass = window.Pose || (typeof Pose !== 'undefined' ? Pose : null);
-                if (!PoseClass) {
-                    setTimeout(setupMocapTrackingBrain, 1000);
-                    return;
-                }
-
-                poseTrackerEngine = new PoseClass({
-                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-                });
-
-                poseTrackerEngine.setOptions({
-                    modelComplexity: 1,
-                    smoothLandmarks: true,
-                    minDetectionConfidence: 0.5,
-                    minTrackingConfidence: 0.5
-                });
-
-                poseTrackerEngine.onResults((results) => {
-                    lastTrackingResults = results;
-                    if (!isMocapActive || !results.poseWorldLandmarks) return;
-
-                    if (executionMode === 'ai' && isModelTrained) {
-                        executeNeuralNetworkInference(results.poseWorldLandmarks);
-                    } else {
-                        executeTrigonometricSolvers(results.poseWorldLandmarks);
-                    }
-                });
-            } catch (e) {
-                console.error("Critical failure during MediaPipe initialization: ", e);
-            }
-        }
-
-        // --- Core Math Trigonometric Pose Solver ---
-        function executeTrigonometricSolvers(wLm) {
-            const L_Shoulder = createVector3FromLandmark(wLm[11]);
-            const R_Shoulder = createVector3FromLandmark(wLm[12]);
-            const L_Elbow = createVector3FromLandmark(wLm[13]);
-            const R_Elbow = createVector3FromLandmark(wLm[14]);
-            const L_Wrist = createVector3FromLandmark(wLm[15]);
-            const R_Wrist = createVector3FromLandmark(wLm[16]);
-            
-            const L_Hip = createVector3FromLandmark(wLm[23]);
-            const R_Hip = createVector3FromLandmark(wLm[24]);
-            const L_Knee = createVector3FromLandmark(wLm[25]);
-            const R_Knee = createVector3FromLandmark(wLm[26]);
-            const L_Ankle = createVector3FromLandmark(wLm[27]);
-            const R_Ankle = createVector3FromLandmark(wLm[28]);
-
-            // Left Upper Arm
-            if (boneMap.shoulderL && !jointOverrides.shoulderL) {
-                let upperArmVec = new THREE.Vector3().subVectors(L_Elbow, L_Shoulder).normalize();
-                let angleZ = Math.atan2(-upperArmVec.y, upperArmVec.x);
-                let clampedShoulder = Math.max(-0.5, Math.min(angleZ, Math.PI));
-                boneMap.shoulderL.rotation.z = clampedShoulder + Math.PI;
-            }
-            // Left Forearm
-            if (boneMap.elbowL && !jointOverrides.elbowL) {
-                let v1 = new THREE.Vector3().subVectors(L_Elbow, L_Shoulder).normalize();
-                let v2 = new THREE.Vector3().subVectors(L_Wrist, L_Elbow).normalize();
-                let elbowAngle3D = Math.acos(Math.max(-1, Math.min(v1.dot(v2), 1))); 
-                boneMap.elbowL.rotation.z = -Math.max(0, Math.min(elbowAngle3D, 2.2));
-            }
-            // Right Upper Arm
-            if (boneMap.shoulderR && !jointOverrides.shoulderR) {
-                let upperArmVec = new THREE.Vector3().subVectors(R_Elbow, R_Shoulder).normalize();
-                let angleZ = Math.atan2(-upperArmVec.y, upperArmVec.x);
-                boneMap.shoulderR.rotation.z = Math.max(-Math.PI, Math.min(angleZ, 0.5));
-            }
-            // Right Forearm
-            if (boneMap.elbowR && !jointOverrides.elbowR) {
-                let v1 = new THREE.Vector3().subVectors(R_Elbow, R_Shoulder).normalize();
-                let v2 = new THREE.Vector3().subVectors(R_Wrist, R_Elbow).normalize();
-                let elbowAngle3D = Math.acos(Math.max(-1, Math.min(v1.dot(v2), 1)));
-                boneMap.elbowR.rotation.z = Math.max(0, Math.min(elbowAngle3D, 2.2));
-            }
-            // Left Hip
-            if (boneMap.hipL && !jointOverrides.hipL) {
-                let thighVec = new THREE.Vector3().subVectors(L_Knee, L_Hip).normalize();
-                let angleZ = Math.atan2(-thighVec.y, thighVec.x) - (Math.PI / 2);
-                boneMap.hipL.rotation.z = Math.max(-0.15, Math.min(angleZ, 0.7));
-            }
-            // Left Knee
-            if (boneMap.kneeL && !jointOverrides.kneeL) {
-                let v1 = new THREE.Vector3().subVectors(L_Knee, L_Hip).normalize();
-                let v2 = new THREE.Vector3().subVectors(L_Ankle, L_Knee).normalize();
-                let kneeAngle3D = Math.acos(Math.max(-1, Math.min(v1.dot(v2), 1)));
-                boneMap.kneeL.rotation.x = Math.max(0, Math.min(kneeAngle3D, 2.2));
-            }
-            // Right Hip
-            if (boneMap.hipR && !jointOverrides.hipR) {
-                let thighVec = new THREE.Vector3().subVectors(R_Knee, R_Hip).normalize();
-                let angleZ = Math.atan2(-thighVec.y, thighVec.x) - (Math.PI / 2);
-                boneMap.hipR.rotation.z = Math.max(-0.7, Math.min(angleZ, 0.15));
-            }
-            // Right Knee
-            if (boneMap.kneeR && !jointOverrides.kneeR) {
-                let v1 = new THREE.Vector3().subVectors(R_Knee, R_Hip).normalize();
-                let v2 = new THREE.Vector3().subVectors(R_Ankle, R_Knee).normalize();
-                let kneeAngle3D = Math.acos(Math.max(-1, Math.min(v1.dot(v2), 1)));
-                boneMap.kneeR.rotation.x = Math.max(0, Math.min(kneeAngle3D, 2.2));
-            }
-        }
-
-        // --- NEW: Snap Rig to Current Video Frame Pose ---
-        function snapToPose() {
-            if (!lastTrackingResults || !lastTrackingResults.poseWorldLandmarks) {
-                updateHUDLog("❌ Cannot snap: No active mocap tracking data on this frame.");
-                return;
-            }
-            // Temporarily unlock all manual overrides so solver calculations pass to the bones
-            Object.keys(jointOverrides).forEach(key => jointOverrides[key] = false);
-            
-            executeTrigonometricSolvers(lastTrackingResults.poseWorldLandmarks);
-            updateHUDLog("⚡ Snapped rig to current frame reference! Tweak joints now.");
-        }
-
-        // --- NEW: Render Major Ghost Poses of Saved Keyframes ---
-        function updateGhostPoseVisualizer() {
-            // Remove previous ghost visual markers
-            while(ghostMeshGroup.children.length > 0) { 
-                ghostMeshGroup.remove(ghostMeshGroup.children[0]); 
-            }
-
-            trainingDataset.forEach((pose, idx) => {
-                // Generate a visual joint network (stick figure skeleton) representing each keyframe pose
-                const ghostSkeleton = new THREE.Group();
-                const materials = new THREE.LineBasicMaterial({ 
-                    color: 0x007aff, 
-                    transparent: true, 
-                    opacity: 0.25, 
-                    depthTest: false 
-                });
-
-                // Decode features stored as [x1, y1, z1, x2, y2, z2...]
-                const jointCoords = [];
-                for(let i = 0; i < pose.input.length; i += 3) {
-                    // Map from MediaPipe coordinate space into WebGL space coordinate scales
-                    const x = -pose.input[i] * 1.5;
-                    const y = -pose.input[i+1] * 1.5 + 1.2;
-                    const z = -pose.input[i+2] * 1.5;
-                    jointCoords.push(new THREE.Vector3(x, y, z));
-                }
-
-                // Visual Connectors drawing loops
-                const bonesToDraw = [
-                    [0, 1], [0, 2], [1, 3], [2, 4], [3, 5], [4, 6], // Shoulders and arms
-                    [0, 6], [1, 7], [6, 7],                         // Torso
-                    [6, 8], [7, 9], [8, 10], [9, 11]                // Legs
-                ];
-
-                bonesToDraw.forEach(pair => {
-                    if (jointCoords[pair[0]] && jointCoords[pair[1]]) {
-                        const geom = new THREE.BufferGeometry().setFromPoints([jointCoords[pair[0]], jointCoords[pair[1]]]);
-                        const line = new THREE.Line(geom, materials);
-                        ghostSkeleton.add(line);
-                    }
-                });
-
-                ghostMeshGroup.add(ghostSkeleton);
-            });
-        }
-
-        // --- MACHINE LEARNING PIPELINE ---
-        function initializeNeuralNetworkStructure() {
-            const model = tf.sequential();
-            model.add(tf.layers.dense({ units: 64, activation: 'relu', inputShape: [36] }));
-            model.add(tf.layers.dense({ units: 48, activation: 'relu' }));
-            model.add(tf.layers.dense({ units: 32, activation: 'relu' }));
-            model.add(tf.layers.dense({ units: 10 })); 
-
-            model.compile({ optimizer: tf.train.adam(0.003), loss: 'meanSquaredError' });
-            rotationPredictorModel = model;
-        }
-
-        function extractFeatureVector(landmarks) {
-            const inputFeatures = [];
-            const jointIndices = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
-            jointIndices.forEach(idx => {
-                const lm = landmarks[idx];
-                inputFeatures.push(lm.x, lm.y, lm.z);
-            });
-            return inputFeatures;
-        }
-
-        function redrawKeyframeTrackElements() {
-            const track = document.getElementById('keyframe-track-wrapper');
-            track.innerHTML = ''; 
-
-            if (!videoElement || videoElement.duration === 0) return;
-
-            trainingDataset.forEach((pose, index) => {
-                const percentage = (pose.timestamp / videoElement.duration) * 100;
-                
-                const element = document.createElement('div');
-                element.className = 'keyframe-marker';
-                element.style.left = `${percentage}%`;
-                element.title = `Keyframe ${index + 1} at ${formatTimeDisplay(pose.timestamp)} (Click to jump)`;
-                
-                element.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    videoElement.currentTime = pose.timestamp;
-                    document.getElementById('timeline-slider').value = Math.floor(pose.timestamp);
-                    updateHUDLog(`Jumped to Keyframe ${index + 1} (${formatTimeDisplay(pose.timestamp)}s).`);
-                });
-
-                track.appendChild(element);
-            });
-
-            // Update visible keyframe ghost rigs
-            updateGhostPoseVisualizer();
-        }
-
-        function recordCalibrationPose() {
-            if (!videoElement) {
-                updateHUDLog("❌ Recording failed: Load a video target tracking asset first.");
-                return;
-            }
-            if (!lastTrackingResults || !lastTrackingResults.poseWorldLandmarks) {
-                updateHUDLog("❌ Recording failed: Run [M] Mocap Stream to track positions first.");
-                return;
-            }
-
-            const currentSec = videoElement.currentTime;
-            const inputFeatures = extractFeatureVector(lastTrackingResults.poseWorldLandmarks);
-            const targetRotations = [
-                boneMap.head.rotation.x, boneMap.spine.rotation.x,
-                boneMap.shoulderL.rotation.z, boneMap.elbowL.rotation.z,
-                boneMap.shoulderR.rotation.z, boneMap.elbowR.rotation.z,
-                boneMap.hipL.rotation.z, boneMap.kneeL.rotation.x,
-                boneMap.hipR.rotation.z, boneMap.kneeR.rotation.x
-            ];
-
-            const existingIndex = trainingDataset.findIndex(d => Math.abs(d.timestamp - currentSec) < 0.5);
-
-            if (existingIndex !== -1) {
-                trainingDataset[existingIndex] = { timestamp: currentSec, input: inputFeatures, target: targetRotations };
-                updateHUDLog(`🔄 Overwrote existing keyframe at ${formatTimeDisplay(currentSec)}.`);
-            } else {
-                trainingDataset.push({ timestamp: currentSec, input: inputFeatures, target: targetRotations });
-                trainingDataset.sort((a, b) => a.timestamp - b.timestamp);
-                updateHUDLog(`💾 Recorded new keyframe at ${formatTimeDisplay(currentSec)}.`);
-            }
-
-            document.getElementById('hud-dataset').innerText = `${trainingDataset.length} Poses`;
-            redrawKeyframeTrackElements();
-        }
-
-        async function trainAIModelEngine() {
-            if (trainingDataset.length < 3) {
-                updateHUDLog("❌ Need more data! Record/Overwrite at least 3 keyframes along the track first.");
-                return;
-            }
-
-            updateHUDLog("🧠 Training neural network parameters on GPU...");
-            
-            const inputsMatrix = trainingDataset.map(d => d.input);
-            const targetsMatrix = trainingDataset.map(d => d.target);
-
-            const inputTensor = tf.tensor2d(inputsMatrix);
-            const targetTensor = tf.tensor2d(targetsMatrix);
-
-            try {
-                await rotationPredictorModel.fit(inputTensor, targetTensor, {
-                    epochs: 150,
-                    batchSize: 4,
-                    shuffle: true
-                });
-
-                isModelTrained = true;
-                updateHUDLog("🎉 Optimization complete! Press [S] to swap solver to AI.");
-            } catch (err) {
-                updateHUDLog("❌ Training optimization error.");
-                console.error(err);
-            } finally {
-                inputTensor.dispose();
-                targetTensor.dispose();
-            }
-        }
-
-        function executeNeuralNetworkInference(worldLandmarks) {
-            if (!isModelTrained || !rotationPredictorModel) return;
-
-            const inputFeatures = extractFeatureVector(worldLandmarks);
-
-            tf.tidy(() => {
-                const liveInputTensor = tf.tensor2d([inputFeatures]);
-                const outputTensor = rotationPredictorModel.predict(liveInputTensor);
-                const predictedRotations = outputTensor.dataSync();
-
-                if (!jointOverrides.head) boneMap.head.rotation.x = predictedRotations[0];
-                if (!jointOverrides.spine) boneMap.spine.rotation.x = predictedRotations[1];
-                if (!jointOverrides.shoulderL) boneMap.shoulderL.rotation.z = predictedRotations[2];
-                if (!jointOverrides.elbowL) boneMap.elbowL.rotation.z = predictedRotations[3];
-                if (!jointOverrides.shoulderR) boneMap.shoulderR.rotation.z = predictedRotations[4];
-                if (!jointOverrides.elbowR) boneMap.elbowR.rotation.z = predictedRotations[5];
-                if (!jointOverrides.hipL) boneMap.hipL.rotation.z = predictedRotations[6];
-                if (!jointOverrides.kneeL) boneMap.kneeL.rotation.x = predictedRotations[7];
-                if (!jointOverrides.hipR) boneMap.hipR.rotation.z = predictedRotations[8];
-                if (!jointOverrides.kneeR) boneMap.kneeR.rotation.x = predictedRotations[9];
-            });
-        }
-
-        function updateHUDLog(text) {
-            document.getElementById('hud-log').innerText = text;
-        }
-
-        function formatTimeDisplay(seconds) {
-            if (isNaN(seconds)) return "00:00";
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        }
-
-        // --- Video Background Overlay System Setup ---
-        function setupVideoBackgroundSystem() {
+        // --- Video Background Projection System ---
+        function setupVideoPlane() {
             videoElement = document.createElement('video');
             videoElement.loop = true;
             videoElement.muted = true;
@@ -647,7 +220,6 @@
             videoTexture.minFilter = THREE.LinearFilter;
             videoTexture.magFilter = THREE.LinearFilter;
 
-            // Make background geometry fit viewport aspect ratios
             const aspect = window.innerWidth / window.innerHeight;
             const bgGeometry = new THREE.PlaneGeometry(2 * aspect, 2);
             const bgMaterial = new THREE.MeshBasicMaterial({ map: videoTexture, depthTest: false, depthWrite: false });
@@ -661,51 +233,7 @@
             renderer.autoClear = false;
             window.backgroundPipeline = { scene: backgroundScene, camera: backgroundCamera };
 
-            const playBtn = document.getElementById('btn-video-play');
-            const timelineSlider = document.getElementById('timeline-slider');
-            const timeDisplay = document.getElementById('timeline-time');
-
-            document.getElementById('video-input').addEventListener('change', (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const url = URL.createObjectURL(file);
-                    videoElement.src = url;
-                    videoElement.addEventListener('loadedmetadata', () => {
-                        diagnosticCanvas.width = videoElement.videoWidth / 2;
-                        diagnosticCanvas.height = videoElement.videoHeight / 2;
-                        timelineSlider.max = Math.floor(videoElement.duration);
-                        timeDisplay.innerText = `00:00 / ${formatTimeDisplay(videoElement.duration)}`;
-                        redrawKeyframeTrackElements();
-                        adjustVideoPlaneScale();
-                    });
-                    videoElement.play();
-                    playBtn.innerText = "⏸";
-                    updateHUDLog(`Loaded video: ${file.name}`);
-                }
-            });
-
-            function toggleVideoPlayback() {
-                if (videoElement.paused) {
-                    videoElement.play();
-                    playBtn.innerText = "⏸";
-                } else {
-                    videoElement.pause();
-                    playBtn.innerText = "▶";
-                }
-            }
-
-            playBtn.addEventListener('click', toggleVideoPlayback);
-
-            timelineSlider.addEventListener('input', (e) => {
-                videoElement.currentTime = parseFloat(e.target.value);
-            });
-
-            videoElement.addEventListener('timeupdate', () => {
-                if (!timelineSlider.matches(':active')) { 
-                    timelineSlider.value = Math.floor(videoElement.currentTime);
-                }
-                timeDisplay.innerText = `${formatTimeDisplay(videoElement.currentTime)} / ${formatTimeDisplay(videoElement.duration)}`;
-            });
+            setupPlaybackUIListeners();
         }
 
         function adjustVideoPlaneScale() {
@@ -720,8 +248,117 @@
             }
         }
 
+        // --- Timeline & Controls ---
+        function setupPlaybackUIListeners() {
+            const playBtn = document.getElementById('btn-video-play');
+            const timelineSlider = document.getElementById('timeline-slider');
+            const timeDisplay = document.getElementById('timeline-time');
+
+            // Video Upload Selection
+            document.getElementById('video-input').addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const url = URL.createObjectURL(file);
+                    videoElement.src = url;
+                    videoElement.addEventListener('loadedmetadata', () => {
+                        timelineSlider.max = Math.floor(videoElement.duration);
+                        timeDisplay.innerText = `00:00 / ${formatTimeDisplay(videoElement.duration)}`;
+                        adjustVideoPlaneScale();
+                        document.getElementById('hud-video').innerText = file.name.substring(0, 15) + "...";
+                        document.getElementById('hud-video').className = "status-val val-on";
+                    });
+                    videoElement.play();
+                    playBtn.innerText = "⏸";
+                    updateHUDLog(`Loaded video: ${file.name}`);
+                }
+            });
+
+            // YOLO JSON Motion Upload Selection
+            document.getElementById('motion-input').addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        try {
+                            importedMotionTrack = JSON.parse(event.target.result);
+                            updateHUDLog(`⚡ Loaded YOLO Motion: ${importedMotionTrack.length} keyframes sync'd!`);
+                            
+                            const ds = document.getElementById('hud-dataset');
+                            ds.innerText = `${importedMotionTrack.length} Frames`;
+                            ds.className = "status-val val-on";
+                            
+                            renderTrackMarkers();
+                        } catch (err) {
+                            updateHUDLog("❌ Error: Invalid JSON File structure.");
+                            console.error(err);
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            });
+
+            // UI Slider & Playhead Sync
+            playBtn.addEventListener('click', () => {
+                if (videoElement.paused) { videoElement.play(); playBtn.innerText = "⏸"; }
+                else { videoElement.pause(); playBtn.innerText = "▶"; }
+            });
+
+            timelineSlider.addEventListener('input', (e) => {
+                videoElement.currentTime = parseFloat(e.target.value);
+            });
+
+            videoElement.addEventListener('timeupdate', () => {
+                if (!timelineSlider.matches(':active')) { 
+                    timelineSlider.value = Math.floor(videoElement.currentTime);
+                }
+                timeDisplay.innerText = `${formatTimeDisplay(videoElement.currentTime)} / ${formatTimeDisplay(videoElement.duration)}`;
+                
+                // Read from YOLO data if loaded
+                applyMotionFrame(videoElement.currentTime);
+            });
+        }
+
+        // Apply coordinates parsed from JSON
+        function applyMotionFrame(currentTime) {
+            if (importedMotionTrack.length === 0) return;
+
+            // Find frame with closest timestamp match
+            const activeFrame = importedMotionTrack.reduce((prev, curr) => {
+                return (Math.abs(curr.timestamp - currentTime) < Math.abs(prev.timestamp - currentTime)) ? curr : prev;
+            });
+
+            // Inject rotation matrix into the character rig
+            if (activeFrame && Math.abs(activeFrame.timestamp - currentTime) < 0.15) {
+                const rot = activeFrame.rotations;
+                if (boneMap.shoulderL) boneMap.shoulderL.rotation.z = rot.shoulderL;
+                if (boneMap.elbowL) boneMap.elbowL.rotation.z = rot.elbowL;
+                if (boneMap.shoulderR) boneMap.shoulderR.rotation.z = rot.shoulderR;
+                if (boneMap.elbowR) boneMap.elbowR.rotation.z = rot.elbowR;
+                if (boneMap.hipL) boneMap.hipL.rotation.z = rot.hipL;
+                if (boneMap.kneeL) boneMap.kneeL.rotation.x = rot.kneeL;
+                if (boneMap.hipR) boneMap.hipR.rotation.z = rot.hipR;
+                if (boneMap.kneeR) boneMap.kneeR.rotation.x = rot.kneeR;
+            }
+        }
+
+        function renderTrackMarkers() {
+            const track = document.getElementById('keyframe-track-wrapper');
+            track.innerHTML = '';
+            if (!videoElement || videoElement.duration === 0) return;
+
+            // Render subtle diamond tickmarks representing motion markers (approx every 15 frames to prevent congestion)
+            importedMotionTrack.forEach((pose, index) => {
+                if (index % 15 !== 0) return;
+                const percent = (pose.timestamp / videoElement.duration) * 100;
+                const tick = document.createElement('div');
+                tick.className = 'keyframe-marker';
+                tick.style.left = `${percent}%`;
+                track.appendChild(tick);
+            });
+        }
+
         // --- Model Rig Loader ---
-        function loadCharacterAsset() {
+        function loadRigModel() {
             const loader = new THREE.GLTFLoader();
             loader.load('Xbot.glb', (gltf) => {
                 const character = gltf.scene;
@@ -738,192 +375,70 @@
                     }
                 });
                 scene.add(character);
-                verifyAndActivateRig();
-            }, null, (error) => {
-                console.warn("Using procedural fallback rig architecture.");
-                generateFallbackRigEngine();
+                updateHUDLog("🎉 Standard 3D Rig Loaded!");
+            }, null, () => {
+                console.warn("Using procedural rig fallback.");
+                generateFallbackRig();
             });
         }
 
-        function verifyAndActivateRig() {
-            Object.keys(boneTargetNames).forEach(key => {
-                if (boneMap[key]) attachTrackerDot(boneMap[key], key);
-            });
+        function generateFallbackRig() {
+            // Setup simple procedural capsule bones if Xbot.glb is missing
+            const geometry = new THREE.CylinderGeometry(0.06, 0.08, 1.6, 16);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x007aff, wireframe: true });
+            const mesh = new THREE.SkinnedMesh(geometry, mat);
+            mesh.position.y = 0.8;
+            scene.add(mesh);
+
+            const root = new THREE.Bone();
+            const joint = new THREE.Bone();
+            root.position.y = -0.8;
+            joint.position.y = 0.8;
+            root.add(joint);
+            mesh.add(root);
+            mesh.bind(new THREE.Skeleton([root, joint]));
+
+            boneMap.shoulderL = root;
+            boneMap.elbowL = joint;
         }
 
-        function attachTrackerDot(boneTarget, boneKey) {
-            const markerGeo = new THREE.SphereGeometry(0.03, 16, 16);
-            const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, depthTest: false });
-            const sphere = new THREE.Mesh(markerGeo, markerMat);
-            sphere.renderOrder = 999;
-            sphere.userData = { isNode: true, boneKey: boneKey, linkedBone: boneTarget };
-            
-            scene.add(sphere);
-            visualMarkers.push({ sphere, bone: boneTarget });
-            clickableTargets.push(sphere);
-        }
-
-        window.addEventListener('pointerdown', (event) => {
-            if (event.target.closest('#mocap-timeline-container') || event.target.closest('#hud-display') || event.target.closest('#quick-guide')) return;
-
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(clickableTargets);
-
-            if (intersects.length > 0) {
-                const targetNode = intersects[0].object;
-                transformGizmo.attach(targetNode.userData.linkedBone);
-                transformGizmo.object.userData.linkedBoneKey = targetNode.userData.boneKey;
-            } else {
-                if (transformGizmo.dragging === false) {
-                    transformGizmo.detach();
-                    controls.enabled = true;
-                }
-            }
-        });
-
-        // --- Keyboard Controls Handler ---
+        // --- Key Bindings ---
         window.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
-
-            if (key === 'v') {
-                document.getElementById('video-input').click();
-            }
-            else if (key === 'q') {
-                snapToPose();
-            }
-            else if (e.code === 'Space') {
-                e.preventDefault();
-                if (videoElement) {
-                    if (videoElement.paused) { videoElement.play(); document.getElementById('btn-video-play').innerText = "⏸"; }
-                    else { videoElement.pause(); document.getElementById('btn-video-play').innerText = "▶"; }
-                }
-            }
-            else if (key === 'm') {
-                isMocapActive = !isMocapActive;
-                const el = document.getElementById('hud-mocap');
-                if (isMocapActive) {
-                    el.innerText = "RUNNING"; el.className = "status-val val-on";
-                    transformGizmo.detach();
-                } else {
-                    el.innerText = "OFF"; el.className = "status-val val-off";
-                }
-            }
-            else if (key === 's') {
-                const el = document.getElementById('hud-solver');
-                if (executionMode === 'math') {
-                    if (!isModelTrained) {
-                        updateHUDLog("❌ AI Model is not trained yet. Press [T] first.");
-                        return;
-                    }
-                    executionMode = 'ai';
-                    el.innerText = "🧠 TRAINED AI SOLVER"; el.className = "status-val val-ai";
-                    Object.keys(jointOverrides).forEach(k => jointOverrides[k] = false);
-                } else {
-                    executionMode = 'math';
-                    el.innerText = "📐 MATH ENGINE"; el.className = "status-val val-math";
-                }
-            }
-            else if (key === 'r') {
-                recordCalibrationPose();
-            }
-            else if (key === 't') {
-                trainAIModelEngine();
-            }
-            else if (key === 'c') {
-                trainingDataset = [];
-                document.getElementById('hud-dataset').innerText = "0 Poses";
-                redrawKeyframeTrackElements();
-                updateHUDLog("Training database cleared.");
-            }
-            else if (key === 'x') {
+            if (key === 'v') document.getElementById('video-input').click();
+            if (key === 'j') document.getElementById('motion-input').click();
+            if (key === 'x') {
                 isXrayMeshMode = !isXrayMeshMode;
                 characterMeshes.forEach(mesh => {
                     mesh.material.transparent = isXrayMeshMode;
                     mesh.material.opacity = isXrayMeshMode ? 0.35 : 1.0;
                     mesh.material.wireframe = isXrayMeshMode;
                 });
-                updateHUDLog(`Mesh rendering changed. Wireframe: ${isXrayMeshMode}`);
+            }
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (videoElement) {
+                    if (videoElement.paused) videoElement.play();
+                    else videoElement.pause();
+                }
             }
         });
 
-        // Offline Fallback Rig Generator
-        function generateFallbackRigEngine() {
-            const geometry = new THREE.CylinderGeometry(0.05, 0.07, 1.5, 16, 10);
-            const pos = geometry.attributes.position;
-            const indices = [], weights = [];
-
-            for (let i = 0; i < pos.count; i++) {
-                let y = pos.getY(i) + 0.75;
-                let idx = y < 0.75 ? 0 : 1;
-                indices.push(idx, 0, 0, 0);
-                weights.push(1, 0, 0, 0);
-            }
-            geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(indices, 4));
-            geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(weights, 4));
-
-            const root = new THREE.Bone();
-            const child = new THREE.Bone();
-            root.position.y = -0.75;
-            child.position.y = 0.75;
-            root.add(child);
-
-            const mat = new THREE.MeshStandardMaterial({ color: 0xffa580, skinning: true, roughness: 0.4 });
-            const fallbackMesh = new THREE.SkinnedMesh(geometry, mat);
-            characterMeshes.push(fallbackMesh);
-            fallbackMesh.add(root);
-            fallbackMesh.bind(new THREE.Skeleton([root, child]));
-            fallbackMesh.position.y = 1.0;
-            scene.add(fallbackMesh);
-
-            boneMap.shoulderL = root;
-            boneMap.elbowL = child;
-            
-            attachTrackerDot(root, 'shoulderL');
-            attachTrackerDot(child, 'elbowL');
+        function updateHUDLog(text) {
+            document.getElementById('hud-log').innerText = text;
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
-            setupVideoBackgroundSystem();
-            setupMocapTrackingBrain();
-            initializeNeuralNetworkStructure();
-            loadCharacterAsset();
-        });
+        function formatTimeDisplay(seconds) {
+            if (isNaN(seconds)) return "00:00";
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
 
-        function animate(timestamp) {
+        // --- Core Loop ---
+        function animate() {
             requestAnimationFrame(animate);
             controls.update();
-
-            visualMarkers.forEach(item => {
-                if (item.bone && item.sphere) {
-                    const worldPos = new THREE.Vector3();
-                    item.bone.getWorldPosition(worldPos);
-                    item.sphere.position.copy(worldPos);
-                }
-            });
-
-            if (videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
-                if (diagnosticCtx && diagnosticCanvas) {
-                    diagnosticCtx.clearRect(0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
-                    diagnosticCtx.drawImage(videoElement, 0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
-
-                    if (lastTrackingResults && lastTrackingResults.poseLandmarks) {
-                        if (typeof drawConnectors !== 'undefined' && typeof POSE_CONNECTORS !== 'undefined') {
-                            drawConnectors(diagnosticCtx, lastTrackingResults.poseLandmarks, POSE_CONNECTORS, { color: '#00ffcc', lineWidth: 2 });
-                        }
-                        if (typeof drawLandmarks !== 'undefined') {
-                            drawLandmarks(diagnosticCtx, lastTrackingResults.poseLandmarks, { color: '#007aff', lineWidth: 1, radius: 2 });
-                        }
-                    }
-                }
-            }
-
-            if (timestamp - lastProcessedTime > 33) {
-                runPipelineInference();
-                lastProcessedTime = timestamp;
-            }
 
             renderer.clear();
             if (window.backgroundPipeline && videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
@@ -931,7 +446,6 @@
             }
             renderer.render(scene, camera);
         }
-        animate(0);
 
         window.addEventListener('resize', () => {
             const aspect = window.innerWidth / window.innerHeight;
@@ -939,6 +453,12 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
             adjustVideoPlaneScale();
+        });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            setupVideoPlane();
+            loadRigModel();
+            animate();
         });
     </script>
 </body>
