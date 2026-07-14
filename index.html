@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flow Studio Pro - Keyframe Animator</title>
+    <title>Flow Studio Pro - Keyframe Alignment Engine</title>
     
     <!-- Three.js Infrastructure -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -16,7 +16,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 
-    <!-- TensorFlow.js Machine Learning Core Engine -->
+    <!-- TensorFlow.js Core Engine -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
 
     <style>
@@ -35,7 +35,39 @@
         #app-container { width: 100vw; height: 100vh; position: relative; }
         #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
 
-        /* HUD Status Overlays */
+        /* Welcome Tutorial Onboarding Overlay */
+        #welcome-tutorial {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            background: rgba(10, 10, 12, 0.95);
+            border: 2px solid var(--accent-green);
+            border-radius: 8px;
+            padding: 25px;
+            max-width: 450px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            backdrop-filter: blur(15px);
+            transition: opacity 0.3s ease;
+        }
+        #welcome-tutorial h2 { color: var(--accent-green); margin-bottom: 12px; }
+        #welcome-tutorial p { font-size: 0.85rem; line-height: 1.5; margin-bottom: 15px; color: #a0aec0; }
+        #welcome-tutorial ol { margin-left: 20px; font-size: 0.8rem; margin-bottom: 20px; line-height: 1.6; }
+        #welcome-tutorial button {
+            background: var(--accent-green);
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            font-family: monospace;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        #welcome-tutorial button:hover { background: #00cc52; }
+
+        /* HUD Overlays */
         #hud-display {
             position: absolute;
             top: 20px;
@@ -138,6 +170,7 @@
         #timeline-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--accent-green); cursor: pointer; }
         #timeline-time { font-size: 0.85rem; min-width: 100px; color: var(--text-main); text-align: right; }
 
+        /* Roto-Plate Diagnostic Feed Window */
         #diagnostic-monitor {
             position: absolute;
             bottom: 125px;
@@ -159,7 +192,19 @@
 <body>
 
     <div id="app-container">
-        <!-- Minimal HUD Dashboard Info overlay -->
+        <!-- Welcoming Tutorial Step Card -->
+        <div id="welcome-tutorial">
+            <h2>🎬 Flow Studio Pro</h2>
+            <p>Welcome! We've aligned the camera settings so reference videos load directly behind your character to let you easily snap and correct bones.</p>
+            <ol>
+                <li>Press <b>V</b> to load a video sequence.</li>
+                <li>Press <b>M</b> to automatically track landmarks.</li>
+                <li>Rotate the cyan joints to correct poses, then press <b>R</b> to save.</li>
+            </ol>
+            <button onclick="dismissTutorial()">Let's Go!</button>
+        </div>
+
+        <!-- HUD Dashboard Info overlay -->
         <div id="hud-display">
             <div>[M] Mocap Stream: <span id="hud-mocap" class="status-val val-off">OFF</span></div>
             <div>[S] Active Solver: <span id="hud-solver" class="status-val val-math">📐 MATH ENGINE</span></div>
@@ -207,13 +252,21 @@
     </div>
 
     <script>
+        // Dismiss first-time tutorial modal
+        function dismissTutorial() {
+            document.getElementById('welcome-tutorial').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('welcome-tutorial').style.display = 'none';
+            }, 300);
+        }
+
         // --- Core ThreeJS Graphics Engine Setup ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
 
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(0, 1.4, 2.5);
+        camera.position.set(0, 1.4, 2.8);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -243,7 +296,6 @@
         let rotationPredictorModel = null;
         let isModelTrained = false;
 
-        // Map containing absolute locks blocking automatic calculations when you manually edit via gizmos
         const jointOverrides = {
             head: false, spine: false,
             shoulderL: false, shoulderR: false,
@@ -259,7 +311,6 @@
         
         transformGizmo.addEventListener('dragging-changed', (event) => {
             controls.enabled = !event.value;
-            // Activate lock on joint while actively dragging it
             if (event.value && transformGizmo.object && transformGizmo.object.userData.linkedBoneKey) {
                 const boneKey = transformGizmo.object.userData.linkedBoneKey;
                 jointOverrides[boneKey] = true;
@@ -296,7 +347,6 @@
             return new THREE.Vector3(lm.x, lm.y, lm.z);
         }
 
-        // --- Safe Asynchronous Tracking Extraction Loop ---
         async function runPipelineInference() {
             if (!poseTrackerEngine || !videoElement || isProcessingFrame) return;
             if (videoElement.paused || videoElement.ended) return;
@@ -312,7 +362,6 @@
             }
         }
 
-        // --- Core Tracking Brain Core Architecture ---
         function setupMocapTrackingBrain() {
             diagnosticCanvas = document.getElementById('mocap-canvas');
             diagnosticCtx = diagnosticCanvas.getContext('2d');
@@ -350,7 +399,6 @@
             }
         }
 
-        // --- Traditional Trigonometric Analytical Math Solvers ---
         function executeTrigonometricSolvers(wLm) {
             const L_Shoulder = createVector3FromLandmark(wLm[11]);
             const R_Shoulder = createVector3FromLandmark(wLm[12]);
@@ -421,7 +469,7 @@
             }
         }
 
-        // --- MACHINE LEARNING CORE PIPELINE ---
+        // --- MACHINE LEARNING PIPELINE ---
         function initializeNeuralNetworkStructure() {
             const model = tf.sequential();
             model.add(tf.layers.dense({ units: 64, activation: 'relu', inputShape: [36] }));
@@ -443,10 +491,9 @@
             return inputFeatures;
         }
 
-        // --- Update and Draw Keyframe Elements on visual timeline track ---
         function redrawKeyframeTrackElements() {
             const track = document.getElementById('keyframe-track-wrapper');
-            track.innerHTML = ''; // Wipe existing visual markers
+            track.innerHTML = ''; 
 
             if (!videoElement || videoElement.duration === 0) return;
 
@@ -458,12 +505,11 @@
                 element.style.left = `${percentage}%`;
                 element.title = `Keyframe ${index + 1} at ${formatTimeDisplay(pose.timestamp)} (Click to jump)`;
                 
-                // Clicking jumps the playhead to that pose to check and adjust joints
                 element.addEventListener('click', (e) => {
                     e.stopPropagation();
                     videoElement.currentTime = pose.timestamp;
                     document.getElementById('timeline-slider').value = Math.floor(pose.timestamp);
-                    updateHUDLog(`Jumped to Keyframe ${index + 1} (${formatTimeDisplay(pose.timestamp)}s) for adjustments.`);
+                    updateHUDLog(`Jumped to Keyframe ${index + 1} (${formatTimeDisplay(pose.timestamp)}s).`);
                 });
 
                 track.appendChild(element);
@@ -490,7 +536,6 @@
                 boneMap.hipR.rotation.z, boneMap.kneeR.rotation.x
             ];
 
-            // Overwrite check: If keyframe already exists near this timestamp (0.5s tolerance), replace it
             const existingIndex = trainingDataset.findIndex(d => Math.abs(d.timestamp - currentSec) < 0.5);
 
             if (existingIndex !== -1) {
@@ -498,7 +543,6 @@
                 updateHUDLog(`🔄 Overwrote existing keyframe at ${formatTimeDisplay(currentSec)}.`);
             } else {
                 trainingDataset.push({ timestamp: currentSec, input: inputFeatures, target: targetRotations });
-                // Sort keyframes sequentially by video playback timing
                 trainingDataset.sort((a, b) => a.timestamp - b.timestamp);
                 updateHUDLog(`💾 Recorded new keyframe at ${formatTimeDisplay(currentSec)}.`);
             }
@@ -562,7 +606,6 @@
             });
         }
 
-        // --- Master HUD Utility loggers ---
         function updateHUDLog(text) {
             document.getElementById('hud-log').innerText = text;
         }
@@ -574,7 +617,7 @@
             return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
 
-        // --- Audio/Video Track Pipeline Management ---
+        // --- Video Background Overlay System Setup ---
         function setupVideoBackgroundSystem() {
             videoElement = document.createElement('video');
             videoElement.loop = true;
@@ -590,13 +633,15 @@
             videoTexture.minFilter = THREE.LinearFilter;
             videoTexture.magFilter = THREE.LinearFilter;
 
-            const bgGeometry = new THREE.PlaneGeometry(2, 2);
+            // Make background geometry fit viewport aspect ratios
+            const aspect = window.innerWidth / window.innerHeight;
+            const bgGeometry = new THREE.PlaneGeometry(2 * aspect, 2);
             const bgMaterial = new THREE.MeshBasicMaterial({ map: videoTexture, depthTest: false, depthWrite: false });
             videoBackgroundPlane = new THREE.Mesh(bgGeometry, bgMaterial);
             videoBackgroundPlane.position.set(0, 0, -1);
             
             const backgroundScene = new THREE.Scene();
-            const backgroundCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            const backgroundCamera = new THREE.OrthographicCamera(-aspect, aspect, 1, -1, 0, 1);
             backgroundScene.add(videoBackgroundPlane);
             
             renderer.autoClear = false;
@@ -617,6 +662,7 @@
                         timelineSlider.max = Math.floor(videoElement.duration);
                         timeDisplay.innerText = `00:00 / ${formatTimeDisplay(videoElement.duration)}`;
                         redrawKeyframeTrackElements();
+                        adjustVideoPlaneScale();
                     });
                     videoElement.play();
                     playBtn.innerText = "⏸";
@@ -648,7 +694,19 @@
             });
         }
 
-        // --- Model Rig Parsing Engine ---
+        function adjustVideoPlaneScale() {
+            if (!videoElement || !videoBackgroundPlane) return;
+            const aspect = window.innerWidth / window.innerHeight;
+            const videoAspect = videoElement.videoWidth / videoElement.videoHeight;
+            
+            if (aspect > videoAspect) {
+                videoBackgroundPlane.scale.set(aspect / videoAspect, 1, 1);
+            } else {
+                videoBackgroundPlane.scale.set(1, videoAspect / aspect, 1);
+            }
+        }
+
+        // --- Model Rig Loader ---
         function loadCharacterAsset() {
             const loader = new THREE.GLTFLoader();
             loader.load('Xbot.glb', (gltf) => {
@@ -681,7 +739,6 @@
 
         function attachTrackerDot(boneTarget, boneKey) {
             const markerGeo = new THREE.SphereGeometry(0.03, 16, 16);
-            // Neon cyan tracking dots exactly like your layout
             const markerMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, depthTest: false });
             const sphere = new THREE.Mesh(markerGeo, markerMat);
             sphere.renderOrder = 999;
@@ -692,9 +749,8 @@
             clickableTargets.push(sphere);
         }
 
-        // Raycast and select bones on canvas view directly
         window.addEventListener('pointerdown', (event) => {
-            if (event.target.closest('#mocap-timeline-container') || event.target.closest('#hud-display') || event.target.closest('#quick-guide')) return;
+            if (event.target.closest('#mocap-timeline-container') || event.target.closest('#hud-display') || event.target.closest('#quick-guide') || event.target.closest('#welcome-tutorial')) return;
 
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -714,12 +770,11 @@
             }
         });
 
-        // --- GLOBAL KEYBOARD INTERACTION MANAGER ---
+        // --- Keyboard Controls Handler ---
         window.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
 
             if (key === 'v') {
-                // Open file loader
                 document.getElementById('video-input').click();
             }
             else if (e.code === 'Space') {
@@ -748,7 +803,6 @@
                     }
                     executionMode = 'ai';
                     el.innerText = "🧠 TRAINED AI SOLVER"; el.className = "status-val val-ai";
-                    // Unlock overrides when swapping solver engines back
                     Object.keys(jointOverrides).forEach(k => jointOverrides[k] = false);
                 } else {
                     executionMode = 'math';
@@ -778,7 +832,7 @@
             }
         });
 
-        // Offline Procedural Skinned Mesh Generator Fallback
+        // Offline Fallback Rig Generator
         function generateFallbackRigEngine() {
             const geometry = new THREE.CylinderGeometry(0.05, 0.07, 1.5, 16, 10);
             const pos = geometry.attributes.position;
@@ -814,7 +868,6 @@
             attachTrackerDot(child, 'elbowL');
         }
 
-        // --- Main Execution Context ---
         window.addEventListener('DOMContentLoaded', () => {
             setupVideoBackgroundSystem();
             setupMocapTrackingBrain();
@@ -864,9 +917,11 @@
         animate(0);
 
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
+            const aspect = window.innerWidth / window.innerHeight;
+            camera.aspect = aspect;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+            adjustVideoPlaneScale();
         });
     </script>
 </body>
