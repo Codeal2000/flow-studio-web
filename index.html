@@ -139,7 +139,7 @@
 
     <div id="canvas-container"></div>
 
-    <script>
+<script>
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
@@ -165,6 +165,7 @@
         let isMocapActive = false;
         let poseTrackerEngine;
         let lastProcessedTime = 0;
+        let lastTrackingResults = null; // Store tracking results to render in main loop
         const characterMeshes = [];
 
         // --- Interactive 3D Gizmo System ---
@@ -215,7 +216,7 @@
             return Math.atan2(jointB.y - jointA.y, jointB.x - jointA.x);
         }
 
-        // --- Updated Step 3: Tracking Solver with Visible Skeleton PIP Draw ---
+        // --- Tracking Solver with Visible Skeleton PIP Draw ---
         function setupMocapTrackingBrain() {
             diagnosticCanvas = document.getElementById('mocap-canvas');
             diagnosticCtx = diagnosticCanvas.getContext('2d');
@@ -232,17 +233,10 @@
             });
 
             poseTrackerEngine.onResults((results) => {
-                // Clear and render raw video frame inside our visual PIP window
-                diagnosticCtx.clearRect(0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
-                diagnosticCtx.drawImage(results.image, 0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
+                // Save results to draw synchronized in the main requestAnimationFrame loop
+                lastTrackingResults = results;
 
-                if (!results.poseLandmarks) return;
-
-                // Draw visible tracking rig markers over video in the PIP window
-                drawConnectors(diagnosticCtx, results.poseLandmarks, POSE_CONNECTORS, { color: '#00ff64', lineWidth: 2 });
-                drawLandmarks(diagnosticCtx, results.poseLandmarks, { color: '#007aff', lineWidth: 1, radius: 2 });
-
-                if (!isMocapActive) return;
+                if (!isMocapActive || !results.poseLandmarks) return;
 
                 const landmarks = results.poseLandmarks;
                 const L_Shoulder = landmarks[11];
@@ -315,6 +309,7 @@
                 } else {
                     mocapBtn.innerText = "🔴 AI Mocap Stream: OFF";
                     mocapBtn.classList.remove('active');
+                    lastTrackingResults = null; // Clear tracking skeleton lines on diagnostic
                 }
             });
         }
@@ -356,8 +351,8 @@
                     const url = URL.createObjectURL(file);
                     videoElement.src = url;
                     
-                    // Force matching sizing dimensions on configuration load profiles
                     videoElement.addEventListener('loadedmetadata', () => {
+                        // Dynamically match canvas viewport sizes on load
                         diagnosticCanvas.width = videoElement.videoWidth / 2;
                         diagnosticCanvas.height = videoElement.videoHeight / 2;
                     });
@@ -581,8 +576,21 @@
                 item.sphere.position.copy(worldPos);
             });
 
-            // Throttled frame pipeline feeding data at 30FPS max cadence limits
-            if (poseTrackerEngine && videoElement && !videoElement.paused && timestamp - lastProcessedTime > 33) {
+            // --- Realtime Diagnostic Canvas PIP rendering ---
+            if (videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
+                // Clear the PIP canvas and draw the current video frame instantly
+                diagnosticCtx.clearRect(0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
+                diagnosticCtx.drawImage(videoElement, 0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
+
+                // Overlay the green skeleton tracking markers if we have active AI data
+                if (isMocapActive && lastTrackingResults && lastTrackingResults.poseLandmarks) {
+                    drawConnectors(diagnosticCtx, lastTrackingResults.poseLandmarks, POSE_CONNECTORS, { color: '#00ff64', lineWidth: 2 });
+                    drawLandmarks(diagnosticCtx, lastTrackingResults.poseLandmarks, { color: '#007aff', lineWidth: 1, radius: 2 });
+                }
+            }
+
+            // Throttled frame pipeline feeding data to MediaPipe at 30FPS max cadence limits
+            if (isMocapActive && poseTrackerEngine && videoElement && !videoElement.paused && timestamp - lastProcessedTime > 33) {
                 if (videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
                     poseTrackerEngine.send({ image: videoElement });
                     lastProcessedTime = timestamp;
