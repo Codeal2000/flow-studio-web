@@ -310,28 +310,38 @@
                         updateSliderUIElement('elbow-r', Math.round((boneMap.elbowR.rotation.z * 180) / Math.PI));
                     }
 
-                    // Left Leg Solver
+                    // --- CORRECTED HIP & LEG ROTATION SOLVERS ---
+
+                    // Left Hip Solver (Calculates angle relative to vertical and clamps outward range)
                     if (boneMap.hipL && L_Hip && L_Knee) {
-                        let angle = computeJointAngle2D(L_Hip, L_Knee) - Math.PI / 2;
-                        boneMap.hipL.rotation.z = -angle;
-                        updateSliderUIElement('hip-l', Math.round((angle * 180) / Math.PI));
+                        let angle = computeJointAngle2D(L_Hip, L_Knee) - (Math.PI / 2);
+                        // Clamp local rotation to prevent leg from crossing past center-body
+                        let clampedAngle = Math.max(-0.6, Math.min(angle, 0.8));
+                        boneMap.hipL.rotation.z = clampedAngle;
+                        updateSliderUIElement('hip-l', Math.round((clampedAngle * 180) / Math.PI));
                     }
+                    // Left Knee Solver (Ensures backward leg bending, matching standard knee biomechanics)
                     if (boneMap.kneeL && L_Knee && L_Ankle) {
                         let angle = computeJointAngle2D(L_Knee, L_Ankle) - computeJointAngle2D(L_Hip, L_Knee);
-                        boneMap.kneeL.rotation.x = -Math.max(0, Math.min(Math.abs(angle), 2.2));
-                        updateSliderUIElement('knee-l', Math.round((boneMap.kneeL.rotation.x * 180) / Math.PI));
+                        let clampedKnee = Math.max(0, Math.min(Math.abs(angle), 2.2));
+                        boneMap.kneeL.rotation.x = clampedKnee;
+                        updateSliderUIElement('knee-l', Math.round((clampedKnee * 180) / Math.PI));
                     }
 
-                    // Right Leg Solver
+                    // Right Hip Solver (Calculates angle relative to vertical and clamps outward range)
                     if (boneMap.hipR && R_Hip && R_Knee) {
-                        let angle = computeJointAngle2D(R_Hip, R_Knee) - Math.PI / 2;
-                        boneMap.hipR.rotation.z = -angle;
-                        updateSliderUIElement('hip-r', Math.round((angle * 180) / Math.PI));
+                        let angle = computeJointAngle2D(R_Hip, R_Knee) - (Math.PI / 2);
+                        // Clamp local rotation to prevent leg from crossing past center-body
+                        let clampedAngle = Math.max(-0.8, Math.min(angle, 0.6));
+                        boneMap.hipR.rotation.z = clampedAngle;
+                        updateSliderUIElement('hip-r', Math.round((clampedAngle * 180) / Math.PI));
                     }
+                    // Right Knee Solver (Ensures backward leg bending, matching standard knee biomechanics)
                     if (boneMap.kneeR && R_Knee && R_Ankle) {
                         let angle = computeJointAngle2D(R_Knee, R_Ankle) - computeJointAngle2D(R_Hip, R_Knee);
-                        boneMap.kneeR.rotation.x = -Math.max(0, Math.min(Math.abs(angle), 2.2));
-                        updateSliderUIElement('knee-r', Math.round((boneMap.kneeR.rotation.x * 180) / Math.PI));
+                        let clampedKnee = Math.max(0, Math.min(Math.abs(angle), 2.2));
+                        boneMap.kneeR.rotation.x = clampedKnee;
+                        updateSliderUIElement('knee-r', Math.round((clampedKnee * 180) / Math.PI));
                     }
                 });
             } catch (e) {
@@ -371,13 +381,13 @@
             return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
 
+        // Rest of background, loader and rendering setup (safeguarded)
         function setupVideoBackgroundSystem() {
             videoElement = document.createElement('video');
             videoElement.loop = true;
             videoElement.muted = true;
             videoElement.playsInline = true;
 
-            // Render prioritize hook
             videoElement.style.position = 'absolute';
             videoElement.style.width = '1px';
             videoElement.style.height = '1px';
@@ -550,9 +560,7 @@
             clickableTargets.push(sphere);
         }
 
-        // --- Optimized Interaction Controls Bus ---
         window.addEventListener('pointerdown', (event) => {
-            // Stop raycasts on elements that should let sliders adjust manually
             if (event.target.closest('#ui-sidebar') || event.target.closest('#mocap-timeline-container')) return;
 
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -566,7 +574,6 @@
                 transformGizmo.attach(targetNode.userData.linkedBone);
                 transformGizmo.object.userData.linkedBoneKey = targetNode.userData.boneKey;
             } else {
-                // Detach Gizmo and ensure OrbitControls is unlocked when clicking off joints
                 if (transformGizmo.dragging === false) {
                     transformGizmo.detach();
                     controls.enabled = true;
@@ -676,7 +683,6 @@
                 }
             });
 
-            // --- Diagnostic Overlay with Fallback Hooks ---
             if (videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
                 if (diagnosticCtx && diagnosticCanvas) {
                     diagnosticCtx.clearRect(0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
