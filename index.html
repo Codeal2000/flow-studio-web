@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flow Studio Pro - Minimalist AI Engine</title>
+    <title>Flow Studio Pro - Keyframe Animator</title>
     
     <!-- Three.js Infrastructure -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -56,6 +56,25 @@
         .val-math { color: #fff; }
         .val-ai { color: var(--accent-blue); }
 
+        /* Quick-Reference Guide Card */
+        #quick-guide {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+            background: rgba(10, 10, 12, 0.85);
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            border-radius: 6px;
+            width: 320px;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            backdrop-filter: blur(10px);
+        }
+        #quick-guide h3 { border-bottom: 1px dashed var(--border-color); padding-bottom: 5px; margin-bottom: 8px; color: var(--accent-green); }
+        .key-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .key-cap { background: #1c1c24; padding: 1px 6px; border-radius: 3px; border: 1px solid #3a3a4c; font-weight: bold; }
+
         #mocap-timeline-container {
             position: absolute;
             bottom: 20px;
@@ -68,9 +87,45 @@
             z-index: 5;
             backdrop-filter: blur(10px);
             display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Interactive Keyframe Track */
+        #keyframe-track-wrapper {
+            position: relative;
+            width: 100%;
+            height: 20px;
+            background: #121216;
+            border-radius: 4px;
+            border: 1px solid #1c1c24;
+            overflow: visible;
+        }
+        .keyframe-marker {
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%) rotate(45deg);
+            width: 10px;
+            height: 10px;
+            background: var(--accent-green);
+            border: 1px solid #fff;
+            cursor: pointer;
+            z-index: 10;
+            box-shadow: 0 0 8px var(--accent-green);
+            transition: scale 0.1s ease;
+        }
+        .keyframe-marker:hover {
+            scale: 1.3;
+            background: var(--accent-orange);
+        }
+
+        .slider-row {
+            display: flex;
             align-items: center;
             gap: 16px;
+            width: 100%;
         }
+
         #btn-video-play {
             background: transparent;
             border: none;
@@ -85,7 +140,7 @@
 
         #diagnostic-monitor {
             position: absolute;
-            bottom: 95px;
+            bottom: 125px;
             right: 20px;
             width: 200px;
             height: 150px;
@@ -108,8 +163,24 @@
         <div id="hud-display">
             <div>[M] Mocap Stream: <span id="hud-mocap" class="status-val val-off">OFF</span></div>
             <div>[S] Active Solver: <span id="hud-solver" class="status-val val-math">📐 MATH ENGINE</span></div>
-            <div>[R] Dataset Pool: <span id="hud-dataset" class="status-val" style="color: var(--accent-orange);">0 Poses</span></div>
+            <div>[R] Keyframes Pool: <span id="hud-dataset" class="status-val" style="color: var(--accent-orange);">0 Poses</span></div>
             <div id="hud-log" style="margin-top: 8px; color: #8a99ad; max-width: 320px; font-size: 0.75rem;">Press [V] to load video plate. Click dots to attach rotation gizmo.</div>
+        </div>
+
+        <!-- Controls Map Card -->
+        <div id="quick-guide">
+            <h3>🎬 ANIMATION CONTROLS</h3>
+            <div class="key-row"><span>Load Video Plate</span><span class="key-cap">V</span></div>
+            <div class="key-row"><span>Play / Pause</span><span class="key-cap">Space</span></div>
+            <div class="key-row"><span>Toggle Auto Mocap Tracker</span><span class="key-cap">M</span></div>
+            <div class="key-row"><span>Toggle Solver (Math / Trained AI)</span><span class="key-cap">S</span></div>
+            <div class="key-row"><span>Record/Overwrite Keyframe</span><span class="key-cap">R</span></div>
+            <div class="key-row"><span>Train Engine (Fits keyframes)</span><span class="key-cap">T</span></div>
+            <div class="key-row"><span>Clear All Keyframes</span><span class="key-cap">C</span></div>
+            <div class="key-row"><span>Toggle Wireframe Mesh</span><span class="key-cap">X</span></div>
+            <div style="margin-top: 8px; font-size: 0.7rem; color: #8a99ad; border-top: 1px solid var(--border-color); padding-top: 8px;">
+                💡 <b>How to Edit:</b> Use mouse left-click to select any cyan point on the character rig, rotate using the ring gizmo, then press <span class="key-cap">R</span> to update/record. Click keyframe diamonds to jump times.
+            </div>
         </div>
 
         <input type="file" id="video-input" class="hidden-input" accept="video/*">
@@ -124,9 +195,14 @@
 
         <!-- Master Player Controls Timeline -->
         <div id="mocap-timeline-container">
-            <button id="btn-video-play">▶</button>
-            <input type="range" id="timeline-slider" min="0" max="100" value="0">
-            <div id="timeline-time">00:00 / 00:00</div>
+            <!-- Keyframe overlay track bar -->
+            <div id="keyframe-track-wrapper" title="Saved pose keyframes display here. Click diamonds to jump to pose."></div>
+            
+            <div class="slider-row">
+                <button id="btn-video-play">▶</button>
+                <input type="range" id="timeline-slider" min="0" max="100" value="0">
+                <div id="timeline-time">00:00 / 00:00</div>
+            </div>
         </div>
     </div>
 
@@ -167,7 +243,7 @@
         let rotationPredictorModel = null;
         let isModelTrained = false;
 
-        // Map containing absolute locks blocking automatic calculations when you manual edit via gizmos
+        // Map containing absolute locks blocking automatic calculations when you manually edit via gizmos
         const jointOverrides = {
             head: false, spine: false,
             shoulderL: false, shoulderR: false,
@@ -367,12 +443,44 @@
             return inputFeatures;
         }
 
+        // --- Update and Draw Keyframe Elements on visual timeline track ---
+        function redrawKeyframeTrackElements() {
+            const track = document.getElementById('keyframe-track-wrapper');
+            track.innerHTML = ''; // Wipe existing visual markers
+
+            if (!videoElement || videoElement.duration === 0) return;
+
+            trainingDataset.forEach((pose, index) => {
+                const percentage = (pose.timestamp / videoElement.duration) * 100;
+                
+                const element = document.createElement('div');
+                element.className = 'keyframe-marker';
+                element.style.left = `${percentage}%`;
+                element.title = `Keyframe ${index + 1} at ${formatTimeDisplay(pose.timestamp)} (Click to jump)`;
+                
+                // Clicking jumps the playhead to that pose to check and adjust joints
+                element.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    videoElement.currentTime = pose.timestamp;
+                    document.getElementById('timeline-slider').value = Math.floor(pose.timestamp);
+                    updateHUDLog(`Jumped to Keyframe ${index + 1} (${formatTimeDisplay(pose.timestamp)}s) for adjustments.`);
+                });
+
+                track.appendChild(element);
+            });
+        }
+
         function recordCalibrationPose() {
+            if (!videoElement) {
+                updateHUDLog("❌ Recording failed: Load a video target tracking asset first.");
+                return;
+            }
             if (!lastTrackingResults || !lastTrackingResults.poseWorldLandmarks) {
-                updateHUDLog("❌ Recording failed: No tracking dataset stream detected.");
+                updateHUDLog("❌ Recording failed: Run [M] Mocap Stream to track positions first.");
                 return;
             }
 
+            const currentSec = videoElement.currentTime;
             const inputFeatures = extractFeatureVector(lastTrackingResults.poseWorldLandmarks);
             const targetRotations = [
                 boneMap.head.rotation.x, boneMap.spine.rotation.x,
@@ -382,14 +490,26 @@
                 boneMap.hipR.rotation.z, boneMap.kneeR.rotation.x
             ];
 
-            trainingDataset.push({ input: inputFeatures, target: targetRotations });
+            // Overwrite check: If keyframe already exists near this timestamp (0.5s tolerance), replace it
+            const existingIndex = trainingDataset.findIndex(d => Math.abs(d.timestamp - currentSec) < 0.5);
+
+            if (existingIndex !== -1) {
+                trainingDataset[existingIndex] = { timestamp: currentSec, input: inputFeatures, target: targetRotations };
+                updateHUDLog(`🔄 Overwrote existing keyframe at ${formatTimeDisplay(currentSec)}.`);
+            } else {
+                trainingDataset.push({ timestamp: currentSec, input: inputFeatures, target: targetRotations });
+                // Sort keyframes sequentially by video playback timing
+                trainingDataset.sort((a, b) => a.timestamp - b.timestamp);
+                updateHUDLog(`💾 Recorded new keyframe at ${formatTimeDisplay(currentSec)}.`);
+            }
+
             document.getElementById('hud-dataset').innerText = `${trainingDataset.length} Poses`;
-            updateHUDLog(`💾 Frame recorded successfully. Total: ${trainingDataset.length} frames.`);
+            redrawKeyframeTrackElements();
         }
 
         async function trainAIModelEngine() {
             if (trainingDataset.length < 3) {
-                updateHUDLog("❌ Need more data! Record at least 3-5 corrected poses first.");
+                updateHUDLog("❌ Need more data! Record/Overwrite at least 3 keyframes along the track first.");
                 return;
             }
 
@@ -409,7 +529,7 @@
                 });
 
                 isModelTrained = true;
-                updateHUDLog("🎉 Optimization complete! Press [S] to toggle over to the AI Solver.");
+                updateHUDLog("🎉 Optimization complete! Press [S] to swap solver to AI.");
             } catch (err) {
                 updateHUDLog("❌ Training optimization error.");
                 console.error(err);
@@ -496,6 +616,7 @@
                         diagnosticCanvas.height = videoElement.videoHeight / 2;
                         timelineSlider.max = Math.floor(videoElement.duration);
                         timeDisplay.innerText = `00:00 / ${formatTimeDisplay(videoElement.duration)}`;
+                        redrawKeyframeTrackElements();
                     });
                     videoElement.play();
                     playBtn.innerText = "⏸";
@@ -573,7 +694,7 @@
 
         // Raycast and select bones on canvas view directly
         window.addEventListener('pointerdown', (event) => {
-            if (event.target.closest('#mocap-timeline-container') || event.target.closest('#hud-display')) return;
+            if (event.target.closest('#mocap-timeline-container') || event.target.closest('#hud-display') || event.target.closest('#quick-guide')) return;
 
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -643,6 +764,7 @@
             else if (key === 'c') {
                 trainingDataset = [];
                 document.getElementById('hud-dataset').innerText = "0 Poses";
+                redrawKeyframeTrackElements();
                 updateHUDLog("Training database cleared.");
             }
             else if (key === 'x') {
