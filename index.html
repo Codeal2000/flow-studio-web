@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flow Studio Pro - Motion Aligner (YOLO Engine)</title>
+    <title>Flow Studio Pro - Local Motion Aligner</title>
     
     <!-- Three.js Infrastructure -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -47,8 +47,8 @@
         .val-off { color: #ff453a; }
         .val-math { color: #fff; }
 
-        /* Quick-Reference Guide Card */
-        #quick-guide {
+        /* Playback Controls Card */
+        #playback-controls-card {
             position: absolute;
             top: 20px;
             right: 20px;
@@ -62,7 +62,7 @@
             line-height: 1.6;
             backdrop-filter: blur(10px);
         }
-        #quick-guide h3 { border-bottom: 1px dashed var(--border-color); padding-bottom: 5px; margin-bottom: 8px; color: var(--accent-green); }
+        #playback-controls-card h3 { border-bottom: 1px dashed var(--border-color); padding-bottom: 5px; margin-bottom: 8px; color: var(--accent-green); }
         .key-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
         .key-cap { background: #1c1c24; padding: 1px 6px; border-radius: 3px; border: 1px solid #3a3a4c; font-weight: bold; }
 
@@ -123,6 +123,7 @@
             overflow: hidden;
             z-index: 5;
             box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            display: none; /* Starts hidden, becomes visible when video loads */
         }
         #mocap-canvas { width: 100%; height: 100%; object-fit: cover; }
 
@@ -136,21 +137,21 @@
         <div id="hud-display">
             <div>[M] YOLO Stream: <span id="hud-mocap" class="status-val val-off">OFF</span></div>
             <div>[S] Tracking Solver: <span id="hud-solver" class="status-val val-math">📐 YOLO TRIG SOLVER</span></div>
-            <div>[J] Track Status: <span id="hud-dataset" style="color: var(--accent-orange);" class="status-val">NO DATA Loaded</span></div>
+            <div>[J] Track Status: <span id="hud-dataset" style="color: var(--accent-orange);" class="status-val">0 Frames</span></div>
             <div id="hud-log" style="margin-top: 8px; color: #8a99ad; max-width: 320px; font-size: 0.75rem;">Press [V] to load video plate. Press [J] to import parsed YOLO data.</div>
         </div>
 
         <!-- Reference Guide -->
-        <div id="quick-guide">
-            <h3>🎬 ANIMATION CONTROLS</h3>
-            <div class="key-row"><span>Load Video Plate</span><span class="key-cap">V</span></div>
-            <div class="key-row"><span>Import YOLO Track JSON</span><span class="key-cap">J</span></div>
+        <div id="playback-controls-card">
+            <h3>🎬 PLAYBACK CONTROLS</h3>
+            <div class="key-row"><span>Load Video File</span><span class="key-cap">V</span></div>
+            <div class="key-row"><span>Load YOLO JSON</span><span class="key-cap">J</span></div>
             <div class="key-row"><span>Play / Pause</span><span class="key-cap">Space</span></div>
             <div class="key-row"><span>Toggle Auto Tracking Sync</span><span class="key-cap">M</span></div>
             <div class="key-row"><span>Reset Manual Overrides</span><span class="key-cap">S</span></div>
             <div class="key-row"><span>Toggle Wireframe Mesh</span><span class="key-cap">X</span></div>
             <div style="margin-top: 8px; font-size: 0.7rem; color: #8a99ad; border-top: 1px solid var(--border-color); padding-top: 8px;">
-                💡 <b>Interactive Tweak:</b> Click any neon green node on the model to attach the rotation gizmo. Rotate to clean up positions. Press <span class="key-cap">S</span> to resume auto-tracking tracking on that bone!
+                💡 <b>Interactive Tweak:</b> Click any neon green node on the model to attach the rotation gizmo. Rotate to clean up positions. Press <span class="key-cap">S</span> to resume auto-tracking on that bone!
             </div>
         </div>
 
@@ -348,11 +349,20 @@
                     const reader = new FileReader();
                     reader.onload = (event) => {
                         try {
-                            motionData = JSON.parse(event.target.result);
-                            const totalFrames = Array.isArray(motionData) ? motionData.length : Object.keys(motionData).length;
+                            const parsed = JSON.parse(event.target.result);
                             
+                            // Normalizes differences between raw lists, frame-indexed objects, or nested detection structures
+                            if (Array.isArray(parsed)) {
+                                motionData = parsed;
+                            } else if (parsed.frames && Array.isArray(parsed.frames)) {
+                                motionData = parsed.frames;
+                            } else {
+                                motionData = parsed;
+                            }
+
+                            const totalFrames = Array.isArray(motionData) ? motionData.length : Object.keys(motionData).length;
                             const ds = document.getElementById('hud-dataset');
-                            ds.innerText = `${totalFrames} Frames Tracked`;
+                            ds.innerText = `${totalFrames} Frames`;
                             ds.style.color = "var(--accent-green)";
                             updateHUDLog(`⚡ Loaded YOLO Motion Data successfully!`);
                         } catch (err) {
@@ -402,12 +412,40 @@
             const fps = 30; // Set to match your video capture source file rate
             const frameIndex = Math.floor(videoElement.currentTime * fps);
 
-            if (Array.isArray(motionData) && motionData[frameIndex]) {
-                const frameData = motionData[frameIndex];
-                const keypoints = frameData.keypoints || frameData;
-                executeTrigonometricSolvers(keypoints);
+            let activeFrameData = null;
+
+            if (Array.isArray(motionData)) {
+                activeFrameData = motionData[frameIndex];
             } else if (motionData[frameIndex.toString()]) {
-                executeTrigonometricSolvers(motionData[frameIndex.toString()]);
+                activeFrameData = motionData[frameIndex.toString()];
+            }
+
+            if (activeFrameData) {
+                // Extracts keypoint nested objects or arrays
+                let keypoints = null;
+                if (Array.isArray(activeFrameData)) {
+                    keypoints = activeFrameData;
+                } else if (activeFrameData.keypoints) {
+                    keypoints = activeFrameData.keypoints;
+                } else if (activeFrameData.annotations && activeFrameData.annotations[0]) {
+                    // Handles standard multi-object exported YOLO layout structures
+                    const rawKpts = activeFrameData.annotations[0].keypoints;
+                    if (Array.isArray(rawKpts)) {
+                        if (Array.isArray(rawKpts[0])) {
+                            keypoints = rawKpts;
+                        } else {
+                            // Converts flat coordinates [x,y,v, x,y,v] into paired array subsets
+                            keypoints = [];
+                            for (let i = 0; i < rawKpts.length; i += 3) {
+                                keypoints.push([rawKpts[i], rawKpts[i+1], rawKpts[i+2]]);
+                            }
+                        }
+                    }
+                }
+                
+                if (keypoints) {
+                    executeTrigonometricSolvers(keypoints);
+                }
             }
         }
 
@@ -455,6 +493,9 @@
                         timelineSlider.max = Math.floor(videoElement.duration);
                         timeDisplay.innerText = `00:00 / ${formatTimeDisplay(videoElement.duration)}`;
                         adjustVideoPlaneScale();
+                        
+                        // Show the PIP diagnostic feed window when plate loaded
+                        document.getElementById('diagnostic-monitor').style.display = 'block';
                     });
                     videoElement.play();
                     playBtn.innerText = "⏸";
@@ -544,7 +585,7 @@
 
         // Mouse Intersect Raycaster Logic
         window.addEventListener('pointerdown', (event) => {
-            if (event.target.closest('#mocap-timeline-container') || event.target.closest('#hud-display') || event.target.closest('#quick-guide')) return;
+            if (event.target.closest('#mocap-timeline-container') || event.target.closest('#hud-display') || event.target.closest('#playback-controls-card')) return;
 
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
