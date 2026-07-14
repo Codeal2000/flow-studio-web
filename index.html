@@ -224,6 +224,12 @@
             return Math.atan2(jointB.y - jointA.y, jointB.x - jointA.x);
         }
 
+        // Computes the absolute, boundary-safe angle difference between two joints
+        function computeNormalizedAngleDifference(angleA, angleB) {
+            let diff = angleA - angleB;
+            return Math.abs(Math.atan2(Math.sin(diff), Math.cos(diff)));
+        }
+
         // --- Safe Asynchronous AI Processing Engine ---
         async function runPipelineInference() {
             if (!poseTrackerEngine || !videoElement || isProcessingFrame) return;
@@ -284,30 +290,40 @@
                     const L_Ankle = landmarks[27];
                     const R_Ankle = landmarks[28];
 
-                    // --- CORRECTED ARM ROTATION SOLVERS (Z-AXIS PROJECTIONS) ---
+                    // --- CORRECTED ARM ROTATION SOLVERS (STABILIZED WRAPPING PROTECTION) ---
                     
-                    // Left Arm Solver (Raises outward, matches standard T-pose setup)
+                    // Left Arm Solver (Shoulder & Hinge)
                     if (boneMap.shoulderL && L_Shoulder && L_Elbow) {
                         let angle = computeJointAngle2D(L_Shoulder, L_Elbow);
                         boneMap.shoulderL.rotation.z = angle + Math.PI; 
                         updateSliderUIElement('shoulder-l', Math.round(((angle + Math.PI) * 180) / Math.PI));
                     }
                     if (boneMap.elbowL && L_Elbow && L_Wrist) {
-                        let angle = Math.abs(computeJointAngle2D(L_Shoulder, L_Elbow) - computeJointAngle2D(L_Elbow, L_Wrist));
-                        boneMap.elbowL.rotation.z = -Math.max(0, Math.min(angle, 2.2)); 
-                        updateSliderUIElement('elbow-l', Math.round((Math.abs(boneMap.elbowL.rotation.z) * 180) / Math.PI));
+                        let angleA = computeJointAngle2D(L_Shoulder, L_Elbow);
+                        let angleB = computeJointAngle2D(L_Elbow, L_Wrist);
+                        let elbowAngle = computeNormalizedAngleDifference(angleA, angleB);
+                        
+                        // Limit physical bending limits (0 to 130 degrees max)
+                        let clampedElbow = -Math.max(0, Math.min(elbowAngle, 2.2));
+                        boneMap.elbowL.rotation.z = clampedElbow; 
+                        updateSliderUIElement('elbow-l', Math.round((Math.abs(clampedElbow) * 180) / Math.PI));
                     }
 
-                    // Right Arm Solver (Raises outward, matches standard T-pose setup)
+                    // Right Arm Solver (Shoulder & Hinge)
                     if (boneMap.shoulderR && R_Shoulder && R_Elbow) {
                         let angle = computeJointAngle2D(R_Shoulder, R_Elbow);
                         boneMap.shoulderR.rotation.z = angle; 
                         updateSliderUIElement('shoulder-r', Math.round((angle * 180) / Math.PI));
                     }
                     if (boneMap.elbowR && R_Elbow && R_Wrist) {
-                        let angle = Math.abs(computeJointAngle2D(R_Shoulder, R_Elbow) - computeJointAngle2D(R_Elbow, R_Wrist));
-                        boneMap.elbowR.rotation.z = Math.max(0, Math.min(angle, 2.2)); 
-                        updateSliderUIElement('elbow-r', Math.round((boneMap.elbowR.rotation.z * 180) / Math.PI));
+                        let angleA = computeJointAngle2D(R_Shoulder, R_Elbow);
+                        let angleB = computeJointAngle2D(R_Elbow, R_Wrist);
+                        let elbowAngle = computeNormalizedAngleDifference(angleA, angleB);
+                        
+                        // Limit physical bending limits (0 to 130 degrees max)
+                        let clampedElbow = Math.max(0, Math.min(elbowAngle, 2.2));
+                        boneMap.elbowR.rotation.z = clampedElbow; 
+                        updateSliderUIElement('elbow-r', Math.round((clampedElbow * 180) / Math.PI));
                     }
 
                     // --- CORRECTED HIP & LEG ROTATION SOLVERS ---
@@ -315,7 +331,6 @@
                     // Left Hip Solver (Calculates angle relative to vertical and clamps outward range)
                     if (boneMap.hipL && L_Hip && L_Knee) {
                         let angle = computeJointAngle2D(L_Hip, L_Knee) - (Math.PI / 2);
-                        // Clamp local rotation to prevent leg from crossing past center-body
                         let clampedAngle = Math.max(-0.6, Math.min(angle, 0.8));
                         boneMap.hipL.rotation.z = clampedAngle;
                         updateSliderUIElement('hip-l', Math.round((clampedAngle * 180) / Math.PI));
@@ -331,7 +346,6 @@
                     // Right Hip Solver (Calculates angle relative to vertical and clamps outward range)
                     if (boneMap.hipR && R_Hip && R_Knee) {
                         let angle = computeJointAngle2D(R_Hip, R_Knee) - (Math.PI / 2);
-                        // Clamp local rotation to prevent leg from crossing past center-body
                         let clampedAngle = Math.max(-0.8, Math.min(angle, 0.6));
                         boneMap.hipR.rotation.z = clampedAngle;
                         updateSliderUIElement('hip-r', Math.round((clampedAngle * 180) / Math.PI));
@@ -354,13 +368,12 @@
                 if (isMocapActive) {
                     mocapBtn.innerText = "🟢 AI Mocap Stream: RUNNING";
                     mocapBtn.classList.add('active');
-                    // Detach manual gizmos to prevent conflicts with live pose tracking
                     transformGizmo.detach();
                     controls.enabled = true;
                 } else {
                     mocapBtn.innerText = "🔴 AI Mocap Stream: OFF";
                     mocapBtn.classList.remove('active');
-                    controls.enabled = true; // Ensure orbit controls unlock
+                    controls.enabled = true; 
                 }
             });
         }
@@ -381,7 +394,6 @@
             return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
 
-        // Rest of background, loader and rendering setup (safeguarded)
         function setupVideoBackgroundSystem() {
             videoElement = document.createElement('video');
             videoElement.loop = true;
@@ -717,6 +729,5 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-    </script>
-</body>
+    </script></body>
 </html>
