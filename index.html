@@ -258,23 +258,33 @@
                 });
 
                 poseTrackerEngine.onResults((results) => {
-                    lastTrackingResults = results;
+                 // --- CORRECTED ARM ROTATION SOLVERS ---
+                    
+                    // Left Arm Solver (Corrected for outward T-pose projection)
+                    if (boneMap.shoulderL && L_Shoulder && L_Elbow) {
+                        // Subtracting the offset coordinates so raising the arm pulls it outward on the Z/Y axes
+                        let angle = computeJointAngle2D(L_Shoulder, L_Elbow);
+                        boneMap.shoulderL.rotation.z = angle + Math.PI; 
+                        updateSliderUIElement('shoulder-l', Math.round(((angle + Math.PI) * 180) / Math.PI));
+                    }
+                    if (boneMap.elbowL && L_Elbow && L_Wrist) {
+                        // Lock the hinge rotation axis and clamp the value so it only folds forward naturally
+                        let angle = Math.abs(computeJointAngle2D(L_Shoulder, L_Elbow) - computeJointAngle2D(L_Elbow, L_Wrist));
+                        boneMap.elbowL.rotation.z = -Math.max(0, Math.min(angle, 2.2)); 
+                        updateSliderUIElement('elbow-l', Math.round((Math.abs(boneMap.elbowL.rotation.z) * 180) / Math.PI));
+                    }
 
-                    if (!isMocapActive || !results.poseLandmarks) return;
-
-                    const landmarks = results.poseLandmarks;
-                    const L_Shoulder = landmarks[11];
-                    const R_Shoulder = landmarks[12];
-                    const L_Elbow = landmarks[13];
-                    const R_Elbow = landmarks[14];
-                    const L_Wrist = landmarks[15];
-                    const R_Wrist = landmarks[16];
-                    const L_Hip = landmarks[23];
-                    const R_Hip = landmarks[24];
-                    const L_Knee = landmarks[25];
-                    const R_Knee = landmarks[26];
-                    const L_Ankle = landmarks[27];
-                    const R_Ankle = landmarks[28];
+                    // Right Arm Solver (Corrected for outward T-pose projection)
+                    if (boneMap.shoulderR && R_Shoulder && R_Elbow) {
+                        let angle = computeJointAngle2D(R_Shoulder, R_Elbow);
+                        boneMap.shoulderR.rotation.z = angle; 
+                        updateSliderUIElement('shoulder-r', Math.round((angle * 180) / Math.PI));
+                    }
+                    if (boneMap.elbowR && R_Elbow && R_Wrist) {
+                        let angle = Math.abs(computeJointAngle2D(R_Shoulder, R_Elbow) - computeJointAngle2D(R_Elbow, R_Wrist));
+                        boneMap.elbowR.rotation.z = Math.max(0, Math.min(angle, 2.2)); 
+                        updateSliderUIElement('elbow-r', Math.round((boneMap.elbowR.rotation.z * 180) / Math.PI));
+                    }
 
                     // Left Arm Solver
                     if (boneMap.shoulderL && L_Shoulder && L_Elbow) {
