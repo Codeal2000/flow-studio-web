@@ -219,7 +219,7 @@
             kneeR: "RightLeg"
         };
 
-        // Helper to turn MediaPipe world landmarks into a stable Three.js Vector3
+        // Standardize real-world landmarks to Three.js vectors
         function createVector3FromLandmark(lm) {
             return new THREE.Vector3(lm.x, lm.y, lm.z);
         }
@@ -267,7 +267,6 @@
                 poseTrackerEngine.onResults((results) => {
                     lastTrackingResults = results;
 
-                    // Switch to poseWorldLandmarks to get camera-angle-independent metric coordinates
                     if (!isMocapActive || !results.poseWorldLandmarks) return;
 
                     const wLm = results.poseWorldLandmarks;
@@ -286,24 +285,23 @@
                     const L_Ankle = createVector3FromLandmark(wLm[27]);
                     const R_Ankle = createVector3FromLandmark(wLm[28]);
 
-                    // --- CAMERA-ANGLE-PROOF 3D VECTOR SOLVERS ---
+                    // --- CORRECTED WORLD COORDINATE SOLVERS (Y-INVERTED) ---
 
                     // Left Upper Arm (Shoulder)
                     if (boneMap.shoulderL) {
-                        let upperArmVec = new THREE.Vector3().subVectors(L_Elbow, L_Shoulder).normalize();
-                        let angleZ = Math.atan2(upperArmVec.y, upperArmVec.x);
+                        // Invert Y direction to align world coordinates to local space
+                        let angleZ = Math.atan2(-(L_Elbow.y - L_Shoulder.y), L_Elbow.x - L_Shoulder.x);
                         boneMap.shoulderL.rotation.z = angleZ + Math.PI;
                         updateSliderUIElement('shoulder-l', Math.round(((angleZ + Math.PI) * 180) / Math.PI));
                     }
 
-                    // Left Forearm (Elbow) - Calculates angle using true 3D dot product vectors
+                    // Left Forearm (Elbow) - Perspective-safe 3D angle limit
                     if (boneMap.elbowL) {
                         let v1 = new THREE.Vector3().subVectors(L_Elbow, L_Shoulder).normalize();
                         let v2 = new THREE.Vector3().subVectors(L_Wrist, L_Elbow).normalize();
-                        let dotProduct = v1.dot(v2);
-                        let elbowAngle3D = Math.acos(Math.max(-1, Math.min(dotProduct, 1))); 
+                        let elbowAngle3D = Math.acos(Math.max(-1, Math.min(v1.dot(v2), 1))); 
 
-                        // Stabilized safe clamp to prevent backward/cross-axis breaking
+                        // Safe clamp: prevents backward popping
                         let clampedElbow = -Math.max(0, Math.min(elbowAngle3D, 2.2));
                         boneMap.elbowL.rotation.z = clampedElbow;
                         updateSliderUIElement('elbow-l', Math.round((Math.abs(clampedElbow) * 180) / Math.PI));
@@ -311,35 +309,36 @@
 
                     // Right Upper Arm (Shoulder)
                     if (boneMap.shoulderR) {
-                        let upperArmVec = new THREE.Vector3().subVectors(R_Elbow, R_Shoulder).normalize();
-                        let angleZ = Math.atan2(upperArmVec.y, upperArmVec.x);
+                        // Invert Y direction to align world coordinates to local space
+                        let angleZ = Math.atan2(-(R_Elbow.y - R_Shoulder.y), R_Elbow.x - R_Shoulder.x);
                         boneMap.shoulderR.rotation.z = angleZ;
                         updateSliderUIElement('shoulder-r', Math.round((angleZ * 180) / Math.PI));
                     }
 
-                    // Right Forearm (Elbow) - Calculates angle using true 3D dot product vectors
+                    // Right Forearm (Elbow) - Perspective-safe 3D angle limit
                     if (boneMap.elbowR) {
                         let v1 = new THREE.Vector3().subVectors(R_Elbow, R_Shoulder).normalize();
                         let v2 = new THREE.Vector3().subVectors(R_Wrist, R_Elbow).normalize();
-                        let dotProduct = v1.dot(v2);
-                        let elbowAngle3D = Math.acos(Math.max(-1, Math.min(dotProduct, 1)));
+                        let elbowAngle3D = Math.acos(Math.max(-1, Math.min(v1.dot(v2), 1)));
 
-                        // Stabilized safe clamp to prevent backward/cross-axis breaking
+                        // Safe clamp: prevents backward popping
                         let clampedElbow = Math.max(0, Math.min(elbowAngle3D, 2.2));
                         boneMap.elbowR.rotation.z = clampedElbow;
                         updateSliderUIElement('elbow-r', Math.round((clampedElbow * 180) / Math.PI));
                     }
 
-                    // Left Hip Solver (Perspective-proof stable 3D rotation)
+                    // --- LEG SOLVERS WITH CROSS-OVER DEFENSE ---
+
+                    // Left Hip (Outward sweep clamp to block crossing past center)
                     if (boneMap.hipL) {
-                        let thighVec = new THREE.Vector3().subVectors(L_Knee, L_Hip).normalize();
-                        let angleZ = Math.atan2(thighVec.y, thighVec.x) - (Math.PI / 2);
-                        let clampedAngle = Math.max(-0.6, Math.min(angleZ, 0.8));
+                        let angleZ = Math.atan2(-(L_Knee.y - L_Hip.y), L_Knee.x - L_Hip.x) - (Math.PI / 2);
+                        // Tight limit: blocks leg from cutting inward past the centerline
+                        let clampedAngle = Math.max(-0.2, Math.min(angleZ, 0.8));
                         boneMap.hipL.rotation.z = clampedAngle;
                         updateSliderUIElement('hip-l', Math.round((clampedAngle * 180) / Math.PI));
                     }
 
-                    // Left Knee Solver (3D Vector alignment)
+                    // Left Knee
                     if (boneMap.kneeL) {
                         let v1 = new THREE.Vector3().subVectors(L_Knee, L_Hip).normalize();
                         let v2 = new THREE.Vector3().subVectors(L_Ankle, L_Knee).normalize();
@@ -349,16 +348,16 @@
                         updateSliderUIElement('knee-l', Math.round((clampedKnee * 180) / Math.PI));
                     }
 
-                    // Right Hip Solver (Perspective-proof stable 3D rotation)
+                    // Right Hip (Outward sweep clamp to block crossing past center)
                     if (boneMap.hipR) {
-                        let thighVec = new THREE.Vector3().subVectors(R_Knee, R_Hip).normalize();
-                        let angleZ = Math.atan2(thighVec.y, thighVec.x) - (Math.PI / 2);
-                        let clampedAngle = Math.max(-0.8, Math.min(angleZ, 0.6));
+                        let angleZ = Math.atan2(-(R_Knee.y - R_Hip.y), R_Knee.x - R_Hip.x) - (Math.PI / 2);
+                        // Tight limit: blocks leg from cutting inward past the centerline
+                        let clampedAngle = Math.max(-0.8, Math.min(angleZ, 0.2));
                         boneMap.hipR.rotation.z = clampedAngle;
                         updateSliderUIElement('hip-r', Math.round((clampedAngle * 180) / Math.PI));
                     }
 
-                    // Right Knee Solver (3D Vector alignment)
+                    // Right Knee
                     if (boneMap.kneeR) {
                         let v1 = new THREE.Vector3().subVectors(R_Knee, R_Hip).normalize();
                         let v2 = new THREE.Vector3().subVectors(R_Ankle, R_Knee).normalize();
@@ -603,6 +602,7 @@
             }
         });
 
+        // Safe visual slider adjustments matching localized transformations
         function updateSlidersFromGizmo(boneKey) {
             const bone = boneMap[boneKey];
             if (!bone) return;
