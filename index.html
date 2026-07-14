@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flow Studio Pro - Motion Capture Engine</title>
+    <!-- Interactive Mocap Playback Timeline -->
+<div id="mocap-timeline-container" style="position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%); width: 60%; background: rgba(10,10,10,0.85); border: 1px solid #333; padding: 10px 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px; z-index: 999; backdrop-filter: blur(5px); box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+    <button id="btn-timeline-play" style="background: #1c1c1c; border: 1px solid #444; color: #fff; cursor: pointer; font-size: 14px; padding: 5px 12px; border-radius: 4px; transition: 0.2s;">▶ Play</button>
+    <input type="range" id="timeline-slider" min="0" max="100" value="0" style="flex-grow: 1; accent-color: #00ff64; cursor: pointer; height: 6px; border-radius: 3px; background: #222; outline: none;">
+    <span id="timeline-time" style="color: #888; font-family: monospace; font-size: 11px; min-width: 85px; text-align: right;">00:00 / 00:00</span>
+</div>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background-color: #050505; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
@@ -158,7 +164,7 @@
         controls.dampingFactor = 0.05;
         controls.target.set(0, 1.0, 0);
 
-        // --- PIP & Machine Learning Framework Matrix Global Configurations ---
+        // --- PIP, Mocap, & Thread Locker States ---
         let videoElement, videoTexture, videoBackgroundPlane;
         let diagnosticCanvas, diagnosticCtx;
         let isXrayMeshMode = false;
@@ -166,6 +172,7 @@
         let poseTrackerEngine;
         let lastProcessedTime = 0;
         let lastTrackingResults = null; 
+        let isProcessingFrame = false; // Prevents WASM loop jamming
         const characterMeshes = [];
 
         // --- Interactive 3D Gizmo System ---
@@ -216,6 +223,22 @@
             return Math.atan2(jointB.y - jointA.y, jointB.x - jointA.x);
         }
 
+        // --- Safe Asynchronous AI Processing Engine ---
+        async function runPipelineInference() {
+            if (!poseTrackerEngine || !videoElement || isProcessingFrame) return;
+            if (videoElement.paused || videoElement.ended) return;
+
+            if (videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
+                isProcessingFrame = true; // Lock execution thread
+                try {
+                    await poseTrackerEngine.send({ image: videoElement });
+                } catch (err) {
+                    console.error("Mocap computation error:", err);
+                }
+                isProcessingFrame = false; // Unlock thread
+            }
+        }
+
         // --- Tracking Solver Engine ---
         function setupMocapTrackingBrain() {
             diagnosticCanvas = document.getElementById('mocap-canvas');
@@ -233,10 +256,9 @@
             });
 
             poseTrackerEngine.onResults((results) => {
-                // Keep the live diagnostic tracking data cached
                 lastTrackingResults = results;
 
-                // Stop right here if we aren't pipe-routing tracking coordinates to the 3D Rig
+                // Return early if AI routing to 3D rig is offline
                 if (!isMocapActive || !results.poseLandmarks) return;
 
                 const landmarks = results.poseLandmarks;
@@ -253,7 +275,7 @@
                 const L_Ankle = landmarks[27];
                 const R_Ankle = landmarks[28];
 
-                // Left Arm Transform mappings
+                // Left Arm Solver
                 if (boneMap.shoulderL && L_Shoulder && L_Elbow) {
                     let angle = computeJointAngle2D(L_Shoulder, L_Elbow) + Math.PI;
                     boneMap.shoulderL.rotation.y = angle;
@@ -265,7 +287,7 @@
                     updateSliderUIElement('elbow-l', Math.round((boneMap.elbowL.rotation.x * 180) / Math.PI));
                 }
 
-                // Right Arm Transform mappings
+                // Right Arm Solver
                 if (boneMap.shoulderR && R_Shoulder && R_Elbow) {
                     let angle = computeJointAngle2D(R_Shoulder, R_Elbow);
                     boneMap.shoulderR.rotation.y = -angle;
@@ -277,7 +299,7 @@
                     updateSliderUIElement('elbow-r', Math.round((boneMap.elbowR.rotation.x * 180) / Math.PI));
                 }
 
-                // Hips & Legs mapping matrices
+                // Left Leg Solver
                 if (boneMap.hipL && L_Hip && L_Knee) {
                     let angle = computeJointAngle2D(L_Hip, L_Knee) - Math.PI / 2;
                     boneMap.hipL.rotation.z = -angle;
@@ -289,6 +311,7 @@
                     updateSliderUIElement('knee-l', Math.round((boneMap.kneeL.rotation.x * 180) / Math.PI));
                 }
 
+                // Right Leg Solver
                 if (boneMap.hipR && R_Hip && R_Knee) {
                     let angle = computeJointAngle2D(R_Hip, R_Knee) - Math.PI / 2;
                     boneMap.hipR.rotation.z = -angle;
@@ -323,11 +346,26 @@
             }
         }
 
+        function formatTimeDisplay(seconds) {
+            if (isNaN(seconds)) return "00:00";
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
         function setupVideoBackgroundSystem() {
             videoElement = document.createElement('video');
             videoElement.loop = true;
             videoElement.muted = true;
             videoElement.playsInline = true;
+
+            // CRITICAL BROWSER DECODER FIX: Force append video to DOM to keep background process prioritized
+            videoElement.style.position = 'absolute';
+            videoElement.style.width = '0px';
+            videoElement.style.height = '0px';
+            videoElement.style.opacity = '0';
+            videoElement.style.pointerEvents = 'none';
+            document.body.appendChild(videoElement);
 
             videoTexture = new THREE.VideoTexture(videoElement);
             videoTexture.minFilter = THREE.LinearFilter;
@@ -345,6 +383,11 @@
             renderer.autoClear = false;
             window.backgroundPipeline = { scene: backgroundScene, camera: backgroundCamera };
 
+            // --- Elements Reference Cache ---
+            const playBtn = document.getElementById('btn-timeline-play');
+            const timelineSlider = document.getElementById('timeline-slider');
+            const timeDisplay = document.getElementById('timeline-time');
+
             document.getElementById('video-input').addEventListener('change', (e) => {
                 const file = e.target.files[0];
                 if (file) {
@@ -354,16 +397,53 @@
                     videoElement.addEventListener('loadedmetadata', () => {
                         diagnosticCanvas.width = videoElement.videoWidth / 2;
                         diagnosticCanvas.height = videoElement.videoHeight / 2;
+                        timelineSlider.max = Math.floor(videoElement.duration);
+                        timeDisplay.innerText = `00:00 / ${formatTimeDisplay(videoElement.duration)}`;
                     });
                     
                     videoElement.play();
+                    playBtn.innerText = "⏸ Pause";
                     document.getElementById('upload-status').innerText = `🎥 Active Plate: ${file.name}`;
                 }
             });
 
-            document.getElementById('btn-video-play').addEventListener('click', () => {
-                if (videoElement.paused) videoElement.play();
-                else videoElement.pause();
+            // Master Video Play/Pause Control Bus
+            function toggleVideoPlayback() {
+                if (videoElement.paused) {
+                    videoElement.play();
+                    playBtn.innerText = "⏸ Pause";
+                } else {
+                    videoElement.pause();
+                    playBtn.innerText = "▶ Play";
+                }
+            }
+
+            playBtn.addEventListener('click', toggleVideoPlayback);
+            document.getElementById('btn-video-play').addEventListener('click', toggleVideoPlayback);
+
+            // Timeline Scrubber Binding
+            timelineSlider.addEventListener('input', (e) => {
+                const targetTime = parseFloat(e.target.value);
+                videoElement.currentTime = targetTime;
+            });
+
+            // Synchronize Playback Head with Scrubber
+            videoElement.addEventListener('timeupdate', () => {
+                if (!timelineSlider.matches(':active')) { // Prevent skipping while user drags
+                    timelineSlider.value = Math.floor(videoElement.currentTime);
+                }
+                timeDisplay.innerText = `${formatTimeDisplay(videoElement.currentTime)} / ${formatTimeDisplay(videoElement.duration)}`;
+            });
+
+            // SCRUB-TO-POSE: Instant update on scrub event even if video is paused
+            videoElement.addEventListener('seeked', async () => {
+                if (poseTrackerEngine && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
+                    try {
+                        await poseTrackerEngine.send({ image: videoElement });
+                    } catch (e) {
+                        console.warn("Seeking frame tracking skip:", e);
+                    }
+                }
             });
 
             document.getElementById('btn-mesh-opacity').addEventListener('click', () => {
@@ -469,7 +549,7 @@
                 transformGizmo.attach(targetNode.userData.linkedBone);
                 transformGizmo.object.userData.linkedBoneKey = targetNode.userData.boneKey;
             } else {
-                if (transformGizmo.dragging === false && !event.target.closest('#ui-sidebar')) {
+                if (transformGizmo.dragging === false && !event.target.closest('#ui-sidebar') && !event.target.closest('#mocap-timeline-container')) {
                     transformGizmo.detach();
                 }
             }
@@ -580,19 +660,17 @@
                 diagnosticCtx.clearRect(0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
                 diagnosticCtx.drawImage(videoElement, 0, 0, diagnosticCanvas.width, diagnosticCanvas.height);
 
-                // Overlay drawing markers if we have tracking data (even if rig linking is OFF)
+                // Overlay drawing markers
                 if (lastTrackingResults && lastTrackingResults.poseLandmarks) {
                     drawConnectors(diagnosticCtx, lastTrackingResults.poseLandmarks, POSE_CONNECTORS, { color: '#00ff64', lineWidth: 2 });
                     drawLandmarks(diagnosticCtx, lastTrackingResults.poseLandmarks, { color: '#007aff', lineWidth: 1, radius: 2 });
                 }
             }
 
-            // Continuous background frame transmission to MediaPipe engine (unblocked by toggle)
-            if (poseTrackerEngine && videoElement && !videoElement.paused && timestamp - lastProcessedTime > 33) {
-                if (videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
-                    poseTrackerEngine.send({ image: videoElement });
-                    lastProcessedTime = timestamp;
-                }
+            // Gated Mocap Processing (fires only after the active frame finishes computing)
+            if (timestamp - lastProcessedTime > 33) {
+                runPipelineInference();
+                lastProcessedTime = timestamp;
             }
 
             renderer.clear();
