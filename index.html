@@ -180,7 +180,6 @@
         transformGizmo.setMode('rotate');
         transformGizmo.setSize(0.6);
         
-        // Safeguard controls focus
         transformGizmo.addEventListener('dragging-changed', (event) => {
             controls.enabled = !event.value;
         });
@@ -220,14 +219,9 @@
             kneeR: "RightLeg"
         };
 
-        function computeJointAngle2D(jointA, jointB) {
-            return Math.atan2(jointB.y - jointA.y, jointB.x - jointA.x);
-        }
-
-        // Computes the absolute, boundary-safe angle difference between two joints
-        function computeNormalizedAngleDifference(angleA, angleB) {
-            let diff = angleA - angleB;
-            return Math.abs(Math.atan2(Math.sin(diff), Math.cos(diff)));
+        // Helper to turn MediaPipe world landmarks into a stable Three.js Vector3
+        function createVector3FromLandmark(lm) {
+            return new THREE.Vector3(lm.x, lm.y, lm.z);
         }
 
         // --- Safe Asynchronous AI Processing Engine ---
@@ -252,7 +246,6 @@
             diagnosticCtx = diagnosticCanvas.getContext('2d');
 
             try {
-                // Ensure MediaPipe's globally loaded Pose class exists before compiling
                 const PoseClass = window.Pose || (typeof Pose !== 'undefined' ? Pose : null);
                 if (!PoseClass) {
                     console.warn("MediaPipe Pose library is not loaded in window space yet. Retrying in 1s...");
@@ -274,86 +267,103 @@
                 poseTrackerEngine.onResults((results) => {
                     lastTrackingResults = results;
 
-                    if (!isMocapActive || !results.poseLandmarks) return;
+                    // Switch to poseWorldLandmarks to get camera-angle-independent metric coordinates
+                    if (!isMocapActive || !results.poseWorldLandmarks) return;
 
-                    const landmarks = results.poseLandmarks;
-                    const L_Shoulder = landmarks[11];
-                    const R_Shoulder = landmarks[12];
-                    const L_Elbow = landmarks[13];
-                    const R_Elbow = landmarks[14];
-                    const L_Wrist = landmarks[15];
-                    const R_Wrist = landmarks[16];
-                    const L_Hip = landmarks[23];
-                    const R_Hip = landmarks[24];
-                    const L_Knee = landmarks[25];
-                    const R_Knee = landmarks[26];
-                    const L_Ankle = landmarks[27];
-                    const R_Ankle = landmarks[28];
-
-                    // --- CORRECTED ARM ROTATION SOLVERS (STABILIZED WRAPPING PROTECTION) ---
+                    const wLm = results.poseWorldLandmarks;
                     
-                    // Left Arm Solver (Shoulder & Hinge)
-                    if (boneMap.shoulderL && L_Shoulder && L_Elbow) {
-                        let angle = computeJointAngle2D(L_Shoulder, L_Elbow);
-                        boneMap.shoulderL.rotation.z = angle + Math.PI; 
-                        updateSliderUIElement('shoulder-l', Math.round(((angle + Math.PI) * 180) / Math.PI));
+                    const L_Shoulder = createVector3FromLandmark(wLm[11]);
+                    const R_Shoulder = createVector3FromLandmark(wLm[12]);
+                    const L_Elbow = createVector3FromLandmark(wLm[13]);
+                    const R_Elbow = createVector3FromLandmark(wLm[14]);
+                    const L_Wrist = createVector3FromLandmark(wLm[15]);
+                    const R_Wrist = createVector3FromLandmark(wLm[16]);
+                    
+                    const L_Hip = createVector3FromLandmark(wLm[23]);
+                    const R_Hip = createVector3FromLandmark(wLm[24]);
+                    const L_Knee = createVector3FromLandmark(wLm[25]);
+                    const R_Knee = createVector3FromLandmark(wLm[26]);
+                    const L_Ankle = createVector3FromLandmark(wLm[27]);
+                    const R_Ankle = createVector3FromLandmark(wLm[28]);
+
+                    // --- CAMERA-ANGLE-PROOF 3D VECTOR SOLVERS ---
+
+                    // Left Upper Arm (Shoulder)
+                    if (boneMap.shoulderL) {
+                        let upperArmVec = new THREE.Vector3().subVectors(L_Elbow, L_Shoulder).normalize();
+                        let angleZ = Math.atan2(upperArmVec.y, upperArmVec.x);
+                        boneMap.shoulderL.rotation.z = angleZ + Math.PI;
+                        updateSliderUIElement('shoulder-l', Math.round(((angleZ + Math.PI) * 180) / Math.PI));
                     }
-                    if (boneMap.elbowL && L_Elbow && L_Wrist) {
-                        let angleA = computeJointAngle2D(L_Shoulder, L_Elbow);
-                        let angleB = computeJointAngle2D(L_Elbow, L_Wrist);
-                        let elbowAngle = computeNormalizedAngleDifference(angleA, angleB);
-                        
-                        // Limit physical bending limits (0 to 130 degrees max)
-                        let clampedElbow = -Math.max(0, Math.min(elbowAngle, 2.2));
-                        boneMap.elbowL.rotation.z = clampedElbow; 
+
+                    // Left Forearm (Elbow) - Calculates angle using true 3D dot product vectors
+                    if (boneMap.elbowL) {
+                        let v1 = new THREE.Vector3().subVectors(L_Elbow, L_Shoulder).normalize();
+                        let v2 = new THREE.Vector3().subVectors(L_Wrist, L_Elbow).normalize();
+                        let dotProduct = v1.dot(v2);
+                        let elbowAngle3D = Math.acos(Math.max(-1, Math.min(dotProduct, 1))); 
+
+                        // Stabilized safe clamp to prevent backward/cross-axis breaking
+                        let clampedElbow = -Math.max(0, Math.min(elbowAngle3D, 2.2));
+                        boneMap.elbowL.rotation.z = clampedElbow;
                         updateSliderUIElement('elbow-l', Math.round((Math.abs(clampedElbow) * 180) / Math.PI));
                     }
 
-                    // Right Arm Solver (Shoulder & Hinge)
-                    if (boneMap.shoulderR && R_Shoulder && R_Elbow) {
-                        let angle = computeJointAngle2D(R_Shoulder, R_Elbow);
-                        boneMap.shoulderR.rotation.z = angle; 
-                        updateSliderUIElement('shoulder-r', Math.round((angle * 180) / Math.PI));
+                    // Right Upper Arm (Shoulder)
+                    if (boneMap.shoulderR) {
+                        let upperArmVec = new THREE.Vector3().subVectors(R_Elbow, R_Shoulder).normalize();
+                        let angleZ = Math.atan2(upperArmVec.y, upperArmVec.x);
+                        boneMap.shoulderR.rotation.z = angleZ;
+                        updateSliderUIElement('shoulder-r', Math.round((angleZ * 180) / Math.PI));
                     }
-                    if (boneMap.elbowR && R_Elbow && R_Wrist) {
-                        let angleA = computeJointAngle2D(R_Shoulder, R_Elbow);
-                        let angleB = computeJointAngle2D(R_Elbow, R_Wrist);
-                        let elbowAngle = computeNormalizedAngleDifference(angleA, angleB);
-                        
-                        // Limit physical bending limits (0 to 130 degrees max)
-                        let clampedElbow = Math.max(0, Math.min(elbowAngle, 2.2));
-                        boneMap.elbowR.rotation.z = clampedElbow; 
+
+                    // Right Forearm (Elbow) - Calculates angle using true 3D dot product vectors
+                    if (boneMap.elbowR) {
+                        let v1 = new THREE.Vector3().subVectors(R_Elbow, R_Shoulder).normalize();
+                        let v2 = new THREE.Vector3().subVectors(R_Wrist, R_Elbow).normalize();
+                        let dotProduct = v1.dot(v2);
+                        let elbowAngle3D = Math.acos(Math.max(-1, Math.min(dotProduct, 1)));
+
+                        // Stabilized safe clamp to prevent backward/cross-axis breaking
+                        let clampedElbow = Math.max(0, Math.min(elbowAngle3D, 2.2));
+                        boneMap.elbowR.rotation.z = clampedElbow;
                         updateSliderUIElement('elbow-r', Math.round((clampedElbow * 180) / Math.PI));
                     }
 
-                    // --- CORRECTED HIP & LEG ROTATION SOLVERS ---
-
-                    // Left Hip Solver (Calculates angle relative to vertical and clamps outward range)
-                    if (boneMap.hipL && L_Hip && L_Knee) {
-                        let angle = computeJointAngle2D(L_Hip, L_Knee) - (Math.PI / 2);
-                        let clampedAngle = Math.max(-0.6, Math.min(angle, 0.8));
+                    // Left Hip Solver (Perspective-proof stable 3D rotation)
+                    if (boneMap.hipL) {
+                        let thighVec = new THREE.Vector3().subVectors(L_Knee, L_Hip).normalize();
+                        let angleZ = Math.atan2(thighVec.y, thighVec.x) - (Math.PI / 2);
+                        let clampedAngle = Math.max(-0.6, Math.min(angleZ, 0.8));
                         boneMap.hipL.rotation.z = clampedAngle;
                         updateSliderUIElement('hip-l', Math.round((clampedAngle * 180) / Math.PI));
                     }
-                    // Left Knee Solver (Ensures backward leg bending, matching standard knee biomechanics)
-                    if (boneMap.kneeL && L_Knee && L_Ankle) {
-                        let angle = computeJointAngle2D(L_Knee, L_Ankle) - computeJointAngle2D(L_Hip, L_Knee);
-                        let clampedKnee = Math.max(0, Math.min(Math.abs(angle), 2.2));
+
+                    // Left Knee Solver (3D Vector alignment)
+                    if (boneMap.kneeL) {
+                        let v1 = new THREE.Vector3().subVectors(L_Knee, L_Hip).normalize();
+                        let v2 = new THREE.Vector3().subVectors(L_Ankle, L_Knee).normalize();
+                        let kneeAngle3D = Math.acos(Math.max(-1, Math.min(v1.dot(v2), 1)));
+                        let clampedKnee = Math.max(0, Math.min(kneeAngle3D, 2.2));
                         boneMap.kneeL.rotation.x = clampedKnee;
                         updateSliderUIElement('knee-l', Math.round((clampedKnee * 180) / Math.PI));
                     }
 
-                    // Right Hip Solver (Calculates angle relative to vertical and clamps outward range)
-                    if (boneMap.hipR && R_Hip && R_Knee) {
-                        let angle = computeJointAngle2D(R_Hip, R_Knee) - (Math.PI / 2);
-                        let clampedAngle = Math.max(-0.8, Math.min(angle, 0.6));
+                    // Right Hip Solver (Perspective-proof stable 3D rotation)
+                    if (boneMap.hipR) {
+                        let thighVec = new THREE.Vector3().subVectors(R_Knee, R_Hip).normalize();
+                        let angleZ = Math.atan2(thighVec.y, thighVec.x) - (Math.PI / 2);
+                        let clampedAngle = Math.max(-0.8, Math.min(angleZ, 0.6));
                         boneMap.hipR.rotation.z = clampedAngle;
                         updateSliderUIElement('hip-r', Math.round((clampedAngle * 180) / Math.PI));
                     }
-                    // Right Knee Solver (Ensures backward leg bending, matching standard knee biomechanics)
-                    if (boneMap.kneeR && R_Knee && R_Ankle) {
-                        let angle = computeJointAngle2D(R_Knee, R_Ankle) - computeJointAngle2D(R_Hip, R_Knee);
-                        let clampedKnee = Math.max(0, Math.min(Math.abs(angle), 2.2));
+
+                    // Right Knee Solver (3D Vector alignment)
+                    if (boneMap.kneeR) {
+                        let v1 = new THREE.Vector3().subVectors(R_Knee, R_Hip).normalize();
+                        let v2 = new THREE.Vector3().subVectors(R_Ankle, R_Knee).normalize();
+                        let kneeAngle3D = Math.acos(Math.max(-1, Math.min(v1.dot(v2), 1)));
+                        let clampedKnee = Math.max(0, Math.min(kneeAngle3D, 2.2));
                         boneMap.kneeR.rotation.x = clampedKnee;
                         updateSliderUIElement('knee-r', Math.round((clampedKnee * 180) / Math.PI));
                     }
@@ -729,5 +739,6 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-    </script></body>
+    </script>
+</body>
 </html>
